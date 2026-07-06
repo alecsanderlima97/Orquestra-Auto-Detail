@@ -14,6 +14,7 @@ import Settings from './pages/Settings';
 import { WeatherProvider } from './context/WeatherContext';
 import PlatformAdmin from './pages/PlatformAdmin';
 import Plans from './pages/Plans';
+import AiAssistant from './pages/AiAssistant';
 import { listenAuth } from './services/commercialService';
 
 function App() {
@@ -79,6 +80,7 @@ function App() {
             <Route path="catalogo" element={<Catalogo />} />
             <Route path="estoque" element={<Estoque />} />
             <Route path="financeiro" element={<Financeiro />} />
+            <Route path="assistente-ia" element={<AiAssistant />} />
             <Route path="planos" element={<Plans />} />
             <Route path="configuracoes" element={<Settings />} />
             <Route path="admin-orquestra" element={user?.role === 'dev' ? <PlatformAdmin /> : <Navigate to="/" replace />} />

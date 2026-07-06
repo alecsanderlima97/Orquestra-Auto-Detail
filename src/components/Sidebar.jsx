@@ -6,6 +6,7 @@ import {
   Car, 
   Droplets, 
   Sparkles, 
+  Bot,
   DollarSign, 
   CreditCard,
   Settings, 
@@ -66,6 +67,11 @@ const Sidebar = ({ isOpen, onClose, onToggleCalculator }) => {
         <NavLink to="/financeiro" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")} onClick={handleNavLinkClick}>
           <DollarSign size={20} />
           <span>Fluxo Financeiro</span>
+        </NavLink>
+
+        <NavLink to="/assistente-ia" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")} onClick={handleNavLinkClick}>
+          <Bot size={20} />
+          <span>Assistente IA</span>
         </NavLink>
 
         <NavLink to="/planos" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")} onClick={handleNavLinkClick}>
