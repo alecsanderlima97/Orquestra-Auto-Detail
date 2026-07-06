@@ -96,7 +96,7 @@ const CalendarModal = ({ isOpen, onClose, onSelectDate, initialDate }) => {
 };
 
 const Agendamentos = () => {
-  const { agendamentos, addAgendamento, updateAgendamento, updateAgendamentoStatus, deleteAgendamento, clientes, servicos } = useData();
+  const { agendamentos, addAgendamento, updateAgendamento, updateAgendamentoStatus, deleteAgendamento, clientes, servicos, userProfile } = useData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [agendamentoParaEditar, setAgendamentoParaEditar] = useState(null);
@@ -145,7 +145,8 @@ const Agendamentos = () => {
 
   const abrirWhatsAppLembrete = (agendamento) => {
     const valorSinal = (agendamento.valor * 0.3).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-    const msg = `OlÃ¡ ${agendamento.cliente}! ðŸš—\n\nPassando para confirmar seu agendamento na nossa EstÃ©tica Automotiva Ã s ${agendamento.horario} do dia ${agendamento.dataStr}.\n\nVeÃ­culo: ${agendamento.veiculo || 'Seu VeÃ­culo'}\n\nPara garantir sua vaga no pÃ¡tio, solicitamos o pagamento do sinal de 30% (R$ ${valorSinal}).\n\nðŸ”‘ *Chave PIX (CPF):* 48724911810\n\nPode enviar o comprovante por aqui? Aguardamos vocÃª! âœ¨`;
+    const pixLine = userProfile?.pix ? `\n\nChave PIX: ${userProfile.pix}` : '';
+    const msg = `Olá ${agendamento.cliente}! ??\n\nPassando para confirmar seu agendamento na nossa Estética Automotiva às ${agendamento.horario} do dia ${agendamento.dataStr}.\n\nVeículo: ${agendamento.veiculo || 'Seu Veículo'}\n\nPara garantir sua vaga no pátio, solicitamos o pagamento do sinal de 30% (R$ ${valorSinal}).${pixLine}\n\nPode enviar o comprovante por aqui? Aguardamos você! ?`;
     window.open(`https://wa.me/${agendamento.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -477,3 +478,5 @@ const Agendamentos = () => {
 };
 
 export default Agendamentos;
+
+

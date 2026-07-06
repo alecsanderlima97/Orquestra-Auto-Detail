@@ -224,7 +224,7 @@ const Dashboard = () => {
                       <button 
                         onClick={() => {
                           const tel = c.telefone?.replace(/\D/g, '');
-                          const msg = `Parabéns, *${c.nome}*! 🎂🎉\n*FELIZ ANIVERSÁRIO!* 🥳🎊\n\nMuita saúde, paz, harmonia, sucesso e incontáveis realizações!!! Esperamos que no próximo ano, possamos mais uma vez celebrar muitas conquistas.\n\n— *Alisson Estética Automotiva* 🚗✨`;
+                          const msg = `Parabéns, *${c.nome}*! 🎂🎉\n*FELIZ ANIVERSÁRIO!* 🥳🎊\n\nMuita saúde, paz, harmonia, sucesso e incontáveis realizações!!! Esperamos que no próximo ano, possamos mais uma vez celebrar muitas conquistas.\n\n— *Orquestra Auto Detail* 🚗✨`;
                           window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
                         }}
                         style={{ background: 'none', border: 'none', color: '#25D366', cursor: 'pointer' }}
@@ -286,3 +286,6 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+
+

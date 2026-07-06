@@ -13,7 +13,7 @@ const db = admin.firestore();
 // CONFIGURAÇÃO DA API DE WHATSAPP
 // A API_KEY será lida com segurança dos Secrets do Firebase
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || 'http://orquestracs.com:8080'; 
-const WHATSAPP_INSTANCE = process.env.WHATSAPP_INSTANCE || 'Alisson_Estetica';
+const WHATSAPP_INSTANCE = process.env.WHATSAPP_INSTANCE || 'Orquestra_Auto_Detail';
 
 /**
  * Função para disparar a mensagem via Gateway
@@ -144,7 +144,7 @@ exports.scheduledBirthdayWishes = functions
 
         const promises = aniversariantes.map(async (doc) => {
             const data = doc.data();
-            const msg = `Parabéns, *${data.nome}*! 🎂🎉\n*FELIZ ANIVERSÁRIO!* 🥳🎊\n\nMuita saúde, paz, harmonia, sucesso e incontáveis realizações!!! Esperamos que no próximo ano, possamos mais uma vez celebrar muitas conquistas.\n\n— *Alisson Estética Automotiva* 🚗✨`;
+            const msg = `Parabéns, *${data.nome}*! 🎂🎉\n*FELIZ ANIVERSÁRIO!* 🥳🎊\n\nMuita saúde, paz, harmonia, sucesso e incontáveis realizações!!! Esperamos que no próximo ano, possamos mais uma vez celebrar muitas conquistas.\n\n— *Orquestra Auto Detail* 🚗✨`;
 
             await sendWhatsApp(data.telefone, msg);
         });
@@ -153,3 +153,6 @@ exports.scheduledBirthdayWishes = functions
         console.log('Processamento de aniversários concluído.');
         return null;
     });
+
+
+

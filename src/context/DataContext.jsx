@@ -391,27 +391,27 @@ export const DataProvider = ({ children, currentUser }) => {
 
   const exportData = () => {
     const data = {
-      alisson_servicos: servicos,
-      alisson_clientes: clientes,
-      alisson_agendamentos: agendamentos,
-      alisson_estoque: estoque,
-      alisson_financeiro: financeiro
+      servicos,
+      clientes,
+      agendamentos,
+      estoque,
+      financeiro
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `backup_alisson_estetica_${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `backup_auto_detail_${new Date().toISOString().split('T')[0]}.json`;
     link.click();
   };
 
   const importData = (jsonData) => {
     try {
-      if (jsonData.alisson_servicos) setServicos(jsonData.alisson_servicos);
-      if (jsonData.alisson_clientes) setClientes(jsonData.alisson_clientes);
-      if (jsonData.alisson_agendamentos) setAgendamentos(jsonData.alisson_agendamentos);
-      if (jsonData.alisson_estoque) setEstoque(jsonData.alisson_estoque);
-      if (jsonData.alisson_financeiro) setFinanceiro(jsonData.alisson_financeiro);
+      if (jsonData.servicos || jsonData.alisson_servicos) setServicos(jsonData.servicos || jsonData.alisson_servicos);
+      if (jsonData.clientes || jsonData.alisson_clientes) setClientes(jsonData.clientes || jsonData.alisson_clientes);
+      if (jsonData.agendamentos || jsonData.alisson_agendamentos) setAgendamentos(jsonData.agendamentos || jsonData.alisson_agendamentos);
+      if (jsonData.estoque || jsonData.alisson_estoque) setEstoque(jsonData.estoque || jsonData.alisson_estoque);
+      if (jsonData.financeiro || jsonData.alisson_financeiro) setFinanceiro(jsonData.financeiro || jsonData.alisson_financeiro);
       alert('Dados restaurados com sucesso!');
       window.location.reload();
     } catch (e) {
@@ -442,5 +442,7 @@ export const DataProvider = ({ children, currentUser }) => {
     </DataContext.Provider>
   );
 };
+
+
 
 

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Calendar, Clock, User, BookOpen, QrCode, Copy, CheckCircle, Car, AlertCircle, Search, DollarSign } from 'lucide-react';
 import { capitalize } from '../utils/masks';
+import { useData } from '../context/DataContext';
 
 const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, agendamentos, agendamentoParaEditar }) => {
+  const { userProfile } = useData();
   const [formData, setFormData] = useState({
     clienteId: '',
     veiculoId: '',
@@ -389,8 +391,8 @@ const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, a
                    <QrCode size={90} color="black" />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <button type="button" onClick={() => navigator.clipboard.writeText('48724911810')} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#aaa', width: '100%', padding: '12px', borderRadius: '10px', cursor: 'pointer', fontSize: '13px' }}>
-                    <Copy size={16} /> Copiar Chave PIX (CPF)
+                  <button type="button" onClick={() => navigator.clipboard.writeText(userProfile?.pix || '')} disabled={!userProfile?.pix} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#aaa', width: '100%', padding: '12px', borderRadius: '10px', cursor: userProfile?.pix ? 'pointer' : 'not-allowed', fontSize: '13px' }}>
+                    <Copy size={16} /> {userProfile?.pix ? 'Copiar Chave PIX' : 'Configure a chave PIX no perfil'}
                   </button>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px', cursor: 'pointer', color: formData.pagoSinal ? 'var(--primary-color)' : '#aaa' }}>
                     <input type="checkbox" name="pagoSinal" checked={formData.pagoSinal} onChange={handleChange} style={{ width: '20px', height: '20px', accentColor: 'var(--primary-color)' }} />
@@ -430,3 +432,5 @@ const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, a
 };
 
 export default AgendamentoFormModal;
+
+

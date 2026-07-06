@@ -45,7 +45,7 @@ const Settings = () => {
       return;
     }
     // Em um sistema real, aqui salvaríamos no banco. Aqui simulamos salvando no localStorage.
-    localStorage.setItem('alisson_admin_pass', newPassword);
+    localStorage.setItem('orquestracs_admin_pass', newPassword);
     alert('Senha alterada com sucesso!');
     setNewPassword('');
     setConfirmPassword('');
@@ -153,6 +153,10 @@ const Settings = () => {
               <div>
                 <label style={{ display: 'block', fontSize: '11px', color: '#888', marginBottom: '6px', textTransform: 'uppercase' }}>Instagram</label>
                 <input type="text" name="instagram" value={userProfile.instagram} onChange={handleProfileChange} style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', color: 'white' }} />
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={{ display: 'block', fontSize: '11px', color: '#888', marginBottom: '6px', textTransform: 'uppercase' }}>Chave PIX</label>
+                <input type="text" name="pix" value={userProfile.pix || ''} onChange={handleProfileChange} placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', color: 'white' }} />
               </div>
               <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ display: 'block', fontSize: '11px', color: '#888', marginBottom: '6px', textTransform: 'uppercase' }}>Endereço Completo</label>
@@ -335,4 +339,5 @@ const Settings = () => {
 };
 
 export default Settings;
+
 

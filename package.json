@@ -1,5 +1,5 @@
 {
-  "name": "estetica-automotiva-alisson",
+  "name": "orquestra-auto-detail",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -30,3 +30,4 @@
     "vite-plugin-pwa": "^1.2.0"
   }
 }
+

@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['pwa-192.png', 'pwa-512.png'],
       manifest: {
-        name: 'Alisson Estética Automotiva',
-        short_name: 'Estética Alisson',
-        description: 'Sistema completo de gerenciamento para estética automotiva',
+        name: 'Orquestra Auto Detail',
+        short_name: 'Auto Detail',
+        description: 'Orquestra Auto Detail - sistema multiempresa para estetica automotiva',
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone',
@@ -39,3 +39,4 @@ export default defineConfig({
     })
   ],
 })
+
