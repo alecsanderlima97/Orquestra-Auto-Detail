@@ -1,0 +1,71 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isPlatformAdmin() {
+      return signedIn() && request.auth.token.email == "orquestracs@gmail.com";
+    }
+
+    function isTenantUser(tenantId) {
+      return signedIn() && exists(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid));
+    }
+
+    function tenantRole(tenantId) {
+      return get(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid)).data.role;
+    }
+
+    function canWriteTenant(tenantId) {
+      return isTenantUser(tenantId) && tenantRole(tenantId) in ["Proprietário", "Financeiro"];
+    }
+
+    function canManageTenant(tenantId) {
+      return isTenantUser(tenantId) && tenantRole(tenantId) == "Proprietário";
+    }
+
+    match /invites/{code} {
+      allow get: if true;
+      allow list: if isPlatformAdmin() || (signedIn() && resource.data.tenantId != null && isTenantUser(resource.data.tenantId));
+      allow create: if isPlatformAdmin()
+        || (request.resource.data.inviteType == "user"
+          && request.resource.data.tenantId is string
+          && canManageTenant(request.resource.data.tenantId));
+      allow update: if isPlatformAdmin()
+        || (signedIn() && resource.data.status == "Ativo" && request.resource.data.status == "Usado")
+        || (resource.data.tenantId is string && canManageTenant(resource.data.tenantId));
+      allow delete: if false;
+    }
+
+    match /tenants/{tenantId} {
+      allow get, list: if isPlatformAdmin() || isTenantUser(tenantId);
+      allow create: if signedIn();
+      allow update: if isPlatformAdmin() || canManageTenant(tenantId);
+      allow delete: if false;
+
+      match /users/{userId} {
+        allow read: if isPlatformAdmin() || isTenantUser(tenantId);
+        allow create: if signedIn() && request.auth.uid == userId;
+        allow update: if isPlatformAdmin() || canManageTenant(tenantId);
+        allow delete: if false;
+      }
+
+      match /{collectionName}/{documentId} {
+        allow read: if isPlatformAdmin() || isTenantUser(tenantId);
+        allow create, update: if isPlatformAdmin() || canWriteTenant(tenantId);
+        allow delete: if isPlatformAdmin() || canManageTenant(tenantId);
+      }
+    }
+
+    match /userTenants/{userId}/memberships/{tenantId} {
+      allow read, create, update: if signedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

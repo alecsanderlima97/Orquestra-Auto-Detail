@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
-import { Download, Upload, Shield, Database, Palette, User as UserIcon, Camera, Save as SaveIcon } from 'lucide-react';
+import { Copy, Download, Upload, Shield, Database, Palette, User as UserIcon, Camera, Save as SaveIcon, UserPlus } from 'lucide-react';
+import { ROLES, canManageUsers, createInternalInvite } from '../services/commercialService';
 
 const Settings = () => {
   const { exportData, importData, theme, setTheme, userProfile, setUserProfile } = useData();
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  const [inviteRole, setInviteRole] = useState('Financeiro');
+  const [internalInvite, setInternalInvite] = useState('');
+  const [inviteMessage, setInviteMessage] = useState('');
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
@@ -23,7 +28,6 @@ const Settings = () => {
 
   const handleSaveProfile = (e) => {
     e.preventDefault();
-    localStorage.setItem('alisson_user_profile', JSON.stringify(userProfile));
     alert('Configurações de perfil salvas com sucesso!');
   };
 
@@ -60,6 +64,16 @@ const Settings = () => {
         }
       };
       reader.readAsText(file);
+    }
+  };
+
+  const handleInternalInvite = async () => {
+    try {
+      const invite = await createInternalInvite(currentUser.tenantId, currentUser.companyName, inviteRole);
+      setInternalInvite(invite.code);
+      setInviteMessage('Convite interno gerado.');
+    } catch (error) {
+      setInviteMessage(error.message || 'Não foi possível gerar convite.');
     }
   };
 
@@ -283,9 +297,42 @@ const Settings = () => {
           </div>
         </div>
 
+        {canManageUsers(currentUser?.role) ? (
+          <div className="card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+              <UserPlus size={24} color="var(--primary-color)" />
+              <h2 style={{ margin: 0, fontSize: '20px' }}>Convite Interno</h2>
+            </div>
+
+            <p style={{ color: '#ccc', fontSize: '14px', marginBottom: '16px', lineHeight: '1.6' }}>
+              Gere convite para colaboradores acessarem esta empresa com permissao controlada.
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)} style={{ flex: 1, minWidth: 160, padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', color: 'white' }}>
+                {ROLES.map((role) => <option key={role}>{role}</option>)}
+              </select>
+              <button className="action-btn" onClick={handleInternalInvite}>
+                <UserPlus size={18} /> Gerar
+              </button>
+            </div>
+
+            {internalInvite ? (
+              <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <strong style={{ fontFamily: 'monospace', fontSize: 22 }}>{internalInvite}</strong>
+                <button className="action-btn" onClick={() => navigator.clipboard.writeText(internalInvite)}>
+                  <Copy size={16} /> Copiar
+                </button>
+              </div>
+            ) : null}
+            {inviteMessage ? <p style={{ color: '#a7f3d0', fontSize: 13 }}>{inviteMessage}</p> : null}
+          </div>
+        ) : null}
+
       </div>
     </div>
   );
 };
 
 export default Settings;
+

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { DataProvider } from './context/DataContext';
 import MainLayout from './components/MainLayout';
@@ -12,8 +12,11 @@ import Login from './pages/Login';
 import BackgroundEffects from './components/BackgroundEffects';
 import Settings from './pages/Settings';
 import { WeatherProvider } from './context/WeatherContext';
+import PlatformAdmin from './pages/PlatformAdmin';
+import { listenAuth } from './services/commercialService';
 
 function App() {
+  const [authChecked, setAuthChecked] = useState(false);
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem('currentUser');
@@ -29,6 +32,16 @@ function App() {
     localStorage.setItem('currentUser', JSON.stringify(userData));
   };
 
+  useEffect(() => {
+    return listenAuth((userData) => {
+      if (userData) {
+        setUser(userData);
+        localStorage.setItem('currentUser', JSON.stringify(userData));
+      }
+      setAuthChecked(true);
+    });
+  }, []);
+
   // Aviso de backup ao fechar a aba
   React.useEffect(() => {
     const handleBeforeUnload = (e) => {
@@ -40,13 +53,21 @@ function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
+  if (!authChecked && !user) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#1a1f14', color: 'white' }}>
+        Carregando acesso...
+      </div>
+    );
+  }
+
   if (!user) {
     return <Login onLogin={handleLogin} />;
   }
 
   return (
     <WeatherProvider>
-      <DataProvider>
+      <DataProvider currentUser={user}>
       <BackgroundEffects />
       <BrowserRouter>
         <Routes>
@@ -58,6 +79,7 @@ function App() {
             <Route path="estoque" element={<Estoque />} />
             <Route path="financeiro" element={<Financeiro />} />
             <Route path="configuracoes" element={<Settings />} />
+            <Route path="admin-orquestra" element={user?.role === 'dev' ? <PlatformAdmin /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -4,6 +4,7 @@ import { useWeather } from '../context/WeatherContext';
 import { useData } from '../context/DataContext';
 import { NavLink, useNavigate } from 'react-router-dom';
 import MusicPlayer from './MusicPlayer';
+import { logoutCommercialUser } from '../services/commercialService';
 
 const Header = () => {
   const [dateTime, setDateTime] = useState(new Date());
@@ -17,8 +18,9 @@ const Header = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (window.confirm('Tem certeza que deseja sair?')) {
+      await logoutCommercialUser().catch(() => undefined);
       localStorage.removeItem('currentUser');
       window.location.reload();
     }

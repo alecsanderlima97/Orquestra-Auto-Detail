@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Limpar cache local</title>
+    <style>
+      body {
+        align-items: center;
+        background: #1a1f14;
+        color: #fff;
+        display: flex;
+        font-family: Arial, sans-serif;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+        text-align: center;
+      }
+      main {
+        max-width: 420px;
+        padding: 24px;
+      }
+      button {
+        background: #5c7249;
+        border: 0;
+        border-radius: 10px;
+        color: #fff;
+        cursor: pointer;
+        font-weight: 700;
+        margin-top: 16px;
+        padding: 14px 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Limpando cache local...</h1>
+      <p id="status">Aguarde alguns segundos.</p>
+      <button id="retry" hidden>Limpar novamente</button>
+    </main>
+
+    <script>
+      async function clearLocalData() {
+        const status = document.getElementById("status");
+        try {
+          if ("serviceWorker" in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+          }
+
+          if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((key) => caches.delete(key)));
+          }
+
+          localStorage.clear();
+          sessionStorage.clear();
+
+          status.textContent = "Cache limpo. Abrindo sistema...";
+          setTimeout(() => {
+            window.location.replace("http://127.0.0.1:5181/?cache=limpo");
+          }, 900);
+        } catch (error) {
+          status.textContent = "Nao foi possivel limpar automaticamente. Tente novamente.";
+          document.getElementById("retry").hidden = false;
+        }
+      }
+
+      document.getElementById("retry").addEventListener("click", clearLocalData);
+      clearLocalData();
+    </script>
+  </body>
+</html>

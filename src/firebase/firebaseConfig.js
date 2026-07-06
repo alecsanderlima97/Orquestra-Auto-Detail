@@ -1,31 +1,32 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
-import { getAnalytics } from "firebase/analytics";
+import { getAnalytics, isSupported } from "firebase/analytics";
 
-// Configuração do Firebase fornecida pelo Alisson
 const firebaseConfig = {
-  apiKey: "AIzaSyAgTlAxQ5TO6GsVgQyG-HBfM7Y7zITXzvg",
-  authDomain: "alisson-estetica-automotiva.firebaseapp.com",
-  projectId: "alisson-estetica-automotiva",
-  storageBucket: "alisson-estetica-automotiva.firebasestorage.app",
-  messagingSenderId: "652300776814",
-  appId: "1:652300776814:web:718b0123b0b194177cfd7f",
-  measurementId: "G-31R0RT0Z27"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Inicializa o Firebase
-const app = initializeApp(firebaseConfig);
+export const firebaseReady = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId);
 
-// Inicializa os serviços
-export const db = getFirestore(app);
-export const auth = getAuth(app);
+const app = firebaseReady ? initializeApp(firebaseConfig) : null;
 
-// Analytics só deve carregar se estivermos no navegador
-let analytics;
-if (typeof window !== "undefined") {
-  analytics = getAnalytics(app);
+export const db = app ? getFirestore(app) : null;
+export const auth = app ? getAuth(app) : null;
+
+export let analytics = null;
+if (app && typeof window !== "undefined") {
+  isSupported()
+    .then((supported) => {
+      if (supported) analytics = getAnalytics(app);
+    })
+    .catch(() => undefined);
 }
 
-export { analytics };
 export default app;

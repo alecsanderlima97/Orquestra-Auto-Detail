@@ -9,12 +9,13 @@ import {
   DollarSign, 
   Settings, 
   Calculator as CalcIcon,
-  LogOut
+  ShieldCheck
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 const Sidebar = ({ isOpen, onClose, onToggleCalculator }) => {
   const { userProfile } = useData();
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
   const location = useLocation();
 
   const handleNavLinkClick = () => {
@@ -65,6 +66,13 @@ const Sidebar = ({ isOpen, onClose, onToggleCalculator }) => {
           <DollarSign size={20} />
           <span>Fluxo Financeiro</span>
         </NavLink>
+
+        {currentUser?.role === 'dev' ? (
+          <NavLink to="/admin-orquestra" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")} onClick={handleNavLinkClick}>
+            <ShieldCheck size={20} />
+            <span>Admin Orquestra.cs</span>
+          </NavLink>
+        ) : null}
 
       </nav>
       

@@ -10,11 +10,13 @@ export const useData = () => {
   return context;
 };
 
-export const DataProvider = ({ children }) => {
+export const DataProvider = ({ children, currentUser }) => {
+  const tenantId = currentUser?.tenantId || currentUser?.email || 'local';
+  const scopedKey = (key) => `estetica:${tenantId}:${key}`;
   // Funções Auxiliares de Persistência
   const getInitialData = (key, defaultValue) => {
     try {
-      const saved = localStorage.getItem(key);
+      const saved = localStorage.getItem(scopedKey(key));
       if (!saved || saved === "null" || saved === "undefined") return defaultValue;
       
       try {
@@ -27,7 +29,7 @@ export const DataProvider = ({ children }) => {
       console.error(`Erro ao carregar ${key}`, e);
       return defaultValue;
     }
-  };  const [servicos, setServicos] = useState(() => getInitialData('alisson_servicos_final', [
+  };  const [servicos, setServicos] = useState(() => getInitialData('servicos', [
     { 
       id: 1, 
       nome: 'Limpeza Técnica', 
@@ -174,11 +176,11 @@ export const DataProvider = ({ children }) => {
     }
   ]));
 
-  const [clientes, setClientes] = useState(() => getInitialData('alisson_clientes', []));
+  const [clientes, setClientes] = useState(() => getInitialData('clientes', []));
 
-  const [agendamentos, setAgendamentos] = useState(() => getInitialData('alisson_agendamentos', []));
+  const [agendamentos, setAgendamentos] = useState(() => getInitialData('agendamentos', []));
 
-  const [estoque, setEstoque] = useState(() => getInitialData('alisson_estoque', [
+  const [estoque, setEstoque] = useState(() => getInitialData('estoque', [
     { id: 1, nome: 'Shampoo Automotivo PH Neutro (5L)', categoria: 'Lavagem', quantidade: 3, minimo: 1, unidade: 'galão', dataEntrada: '2026-04-01', dataSaida: '' },
     { id: 2, nome: 'Cera de Carnaúba Premium (200g)', categoria: 'Acabamento', quantidade: 5, minimo: 2, unidade: 'un', dataEntrada: '2026-04-01', dataSaida: '' },
     { id: 3, nome: 'APC - Limpador Multiuso (5L)', categoria: 'Limpeza Interna', quantidade: 2, minimo: 1, unidade: 'galão', dataEntrada: '2026-04-01', dataSaida: '' },
@@ -186,31 +188,31 @@ export const DataProvider = ({ children }) => {
     { id: 5, nome: 'Composto Polidor Corte (1kg)', categoria: 'Polimento', quantidade: 1, minimo: 1, unidade: 'un', dataEntrada: '2026-04-01', dataSaida: '' }
   ]));
 
-  const [financeiro, setFinanceiro] = useState(() => getInitialData('alisson_financeiro', []));
+  const [financeiro, setFinanceiro] = useState(() => getInitialData('financeiro', []));
 
   const [privacidade, setPrivacidade] = useState(() => {
-    const saved = localStorage.getItem('alisson_privacidade');
+    const saved = localStorage.getItem(scopedKey('privacidade'));
     return saved ? JSON.parse(saved) : false;
   });
 
-  const [theme, setTheme] = useState(() => getInitialData('alisson_theme', 'premium'));
+  const [theme, setTheme] = useState(() => getInitialData('theme', 'premium'));
 
   const [userProfile, setUserProfile] = useState(() => {
-    const defaultProfile = { 
-      nome: 'Alisson Henrique Rodrigues de Campos', 
-      cargo: 'Proprietário', 
-      cpf: '487.249.118-10',
-      nascimento: '27/04/1999',
-      endereco: 'Rua Ângelo Santos Penteado, 186',
-      email: 'walissonrodrigues1055@gmail.com',
-      telefone: '+55 (15) 99767-5822',
-      cnpj: '42.563.724/0001-93',
-      instagram: '@Alisson.est_automotiva',
+    const defaultProfile = {
+      nome: currentUser?.name || currentUser?.companyName || 'Novo Cliente',
+      cargo: currentUser?.role || 'Propriet�rio',
+      cpf: '',
+      nascimento: '',
+      endereco: '',
+      email: currentUser?.email || '',
+      telefone: '',
+      cnpj: '',
+      instagram: '',
       osCounter: 1,
-      foto: null 
+      foto: null
     };
     try {
-      const saved = localStorage.getItem('alisson_user');
+      const saved = localStorage.getItem(scopedKey('user'));
       return saved ? { ...defaultProfile, ...JSON.parse(saved) } : defaultProfile;
     } catch (e) {
       return defaultProfile;
@@ -220,7 +222,7 @@ export const DataProvider = ({ children }) => {
   // Aplica o tema ao body
   useEffect(() => {
     document.body.setAttribute('data-theme', theme);
-    localStorage.setItem('alisson_theme', theme);
+    localStorage.setItem(scopedKey('theme'), theme);
   }, [theme]);
 
   // Efeito para migrar/corrigir agendamentos (numeração OS)
@@ -283,13 +285,13 @@ export const DataProvider = ({ children }) => {
 
   // Efeito para salvar no localStorage
   useEffect(() => {
-    localStorage.setItem('alisson_servicos_final', JSON.stringify(servicos));
-    localStorage.setItem('alisson_clientes', JSON.stringify(clientes));
-    localStorage.setItem('alisson_agendamentos', JSON.stringify(agendamentos));
-    localStorage.setItem('alisson_estoque', JSON.stringify(estoque));
-    localStorage.setItem('alisson_financeiro', JSON.stringify(financeiro));
-    localStorage.setItem('alisson_privacidade', JSON.stringify(privacidade));
-    localStorage.setItem('alisson_user', JSON.stringify(userProfile));
+    localStorage.setItem(scopedKey('servicos'), JSON.stringify(servicos));
+    localStorage.setItem(scopedKey('clientes'), JSON.stringify(clientes));
+    localStorage.setItem(scopedKey('agendamentos'), JSON.stringify(agendamentos));
+    localStorage.setItem(scopedKey('estoque'), JSON.stringify(estoque));
+    localStorage.setItem(scopedKey('financeiro'), JSON.stringify(financeiro));
+    localStorage.setItem(scopedKey('privacidade'), JSON.stringify(privacidade));
+    localStorage.setItem(scopedKey('user'), JSON.stringify(userProfile));
   }, [servicos, clientes, agendamentos, estoque, financeiro, privacidade, userProfile]);
 
   const addCliente = (cliente) => {
@@ -440,3 +442,5 @@ export const DataProvider = ({ children }) => {
     </DataContext.Provider>
   );
 };
+
+
