@@ -4,10 +4,13 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import Calculator from './Calculator';
 import Footer from './Footer';
+import { getSubscriptionAccess } from '../services/commercialService';
 
 const MainLayout = () => {
   const [showCalculator, setShowCalculator] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  const access = getSubscriptionAccess(currentUser);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
   const closeSidebar = () => setIsSidebarOpen(false);
@@ -38,7 +41,7 @@ const MainLayout = () => {
       <div className="content-wrapper">
         <Header />
         <main className="main-content">
-          <Outlet />
+          {access.blocked && currentUser?.role !== 'dev' ? <BlockedSubscription access={access} currentUser={currentUser} /> : <Outlet />}
         </main>
         <Footer />
       </div>
@@ -66,5 +69,19 @@ const MainLayout = () => {
     </div>
   );
 };
+
+const BlockedSubscription = ({ access, currentUser }) => (
+  <div className="card" style={{ maxWidth: 760, margin: '40px auto', textAlign: 'center', padding: 32 }}>
+    <h1 style={{ marginTop: 0, fontSize: 30 }}>Acesso temporariamente bloqueado</h1>
+    <p style={{ color: '#bbb', lineHeight: 1.7 }}>
+      A empresa <strong>{currentUser?.companyName || 'cliente'}</strong> esta com status <strong>{access.status}</strong>.
+      {access.reason === 'vencido_5_dias' ? ` O pagamento venceu ha ${access.pastDueDays} dias corridos.` : ''}
+    </p>
+    <p style={{ color: '#aaa' }}>Entre em contato com a Orquestra.cs para regularizar o plano e liberar o acesso.</p>
+    <a className="action-btn" href="https://wa.me/5515998478705" target="_blank" rel="noreferrer" style={{ display: 'inline-flex', marginTop: 16 }}>
+      Falar com suporte
+    </a>
+  </div>
+);
 
 export default MainLayout;

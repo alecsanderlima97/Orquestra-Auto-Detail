@@ -25,11 +25,34 @@ export const ROLES = ["Proprietário", "Financeiro", "Consulta"];
 export const SUBSCRIPTION_STATUSES = ["trial", "ativo", "vencido", "bloqueado", "cancelado"];
 
 export const PLANS = {
-  starter: { label: "Starter", monthlyPrice: "R$ 97", limits: { users: 2, vehicles: 200, appointments: 150 } },
-  medium: { label: "Medium", monthlyPrice: "R$ 197", limits: { users: 5, vehicles: 1000, appointments: 800 } },
-  profissional: { label: "Profissional", monthlyPrice: "R$ 197", limits: { users: 5, vehicles: 1000, appointments: 800 } },
-  premium: { label: "Premium", monthlyPrice: "R$ 397", limits: { users: 12, vehicles: 5000, appointments: 3000 } }
+  starter: { label: "Starter", monthlyPrice: "R$ 97", limits: { users: 2, vehicles: 200, appointments: 150, aiCredits: 0 }, features: ["Agenda", "Clientes e veiculos", "Catalogo de servicos", "Backup local"] },
+  medium: { label: "Medium", monthlyPrice: "R$ 197", limits: { users: 5, vehicles: 1000, appointments: 800, aiCredits: 30 }, features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Assistente IA inicial"] },
+  profissional: { label: "Profissional", monthlyPrice: "R$ 197", limits: { users: 5, vehicles: 1000, appointments: 800, aiCredits: 30 }, features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Assistente IA inicial"] },
+  premium: { label: "Premium", monthlyPrice: "R$ 397", limits: { users: 12, vehicles: 5000, appointments: 3000, aiCredits: 120 }, features: ["Tudo do Medium", "Multiunidade", "Prioridade no suporte", "Assistente IA avancado"] }
 };
+
+export function daysPastDue(nextBillingDate, now = new Date()) {
+  if (!nextBillingDate) return 0;
+  const due = new Date(`${nextBillingDate}T23:59:59`);
+  if (Number.isNaN(due.getTime()) || now <= due) return 0;
+  return Math.floor((now.getTime() - due.getTime()) / 86400000);
+}
+
+export function getSubscriptionAccess(user) {
+  const status = user?.subscriptionStatus || "trial";
+  const pastDueDays = daysPastDue(user?.nextBillingDate);
+  const autoBlocked = status === "vencido" && pastDueDays >= 5;
+  const blocked = status === "bloqueado" || status === "cancelado" || autoBlocked;
+
+  return {
+    blocked,
+    pastDueDays,
+    plan: PLANS[user?.planId] || PLANS.medium,
+    reason: autoBlocked ? "vencido_5_dias" : status,
+    status,
+    warning: status === "vencido" && !autoBlocked
+  };
+}
 
 export function canWrite(role) {
   return role === "Proprietário" || role === "Financeiro";

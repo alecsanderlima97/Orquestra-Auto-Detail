@@ -7,6 +7,7 @@ import {
   Droplets, 
   Sparkles, 
   DollarSign, 
+  CreditCard,
   Settings, 
   Calculator as CalcIcon,
   ShieldCheck
@@ -65,6 +66,11 @@ const Sidebar = ({ isOpen, onClose, onToggleCalculator }) => {
         <NavLink to="/financeiro" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")} onClick={handleNavLinkClick}>
           <DollarSign size={20} />
           <span>Fluxo Financeiro</span>
+        </NavLink>
+
+        <NavLink to="/planos" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")} onClick={handleNavLinkClick}>
+          <CreditCard size={20} />
+          <span>Planos</span>
         </NavLink>
 
         {currentUser?.role === 'dev' ? (
