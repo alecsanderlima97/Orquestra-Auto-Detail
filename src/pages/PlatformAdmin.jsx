@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Ban, CheckCircle2, Copy, Edit3, Eye, Save, Trash2, TicketPlus } from "lucide-react";
+import { Archive, CheckCircle2, Copy, Eye, RefreshCw, Save, TicketPlus } from "lucide-react";
 import {
   PLANS,
   SUBSCRIPTION_STATUSES,
@@ -10,40 +10,85 @@ import {
   updateTenantSubscription
 } from "../services/commercialService";
 
+const adminWrap = {
+  background: "#f6f8fb",
+  color: "#020617",
+  margin: "-40px",
+  minHeight: "calc(100vh - 80px)",
+  paddingBottom: 28
+};
+
 const inputStyle = {
-  height: "42px",
-  borderRadius: "10px",
-  border: "1px solid rgba(255,255,255,0.08)",
-  background: "rgba(255,255,255,0.04)",
-  color: "white",
-  padding: "0 12px"
+  height: 34,
+  borderRadius: 5,
+  border: "1px solid #cbd5e1",
+  background: "#fff",
+  color: "#020617",
+  padding: "0 10px",
+  width: "100%"
+};
+
+const buttonDark = {
+  height: 34,
+  borderRadius: 5,
+  border: "none",
+  background: "#020617",
+  color: "#fff",
+  padding: "0 14px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 7,
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: "pointer"
 };
 
 const formatDate = (date) => {
-  if (!date) return "Nao informado";
+  if (!date) return "Sem registro";
   return new Date(`${date.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR");
 };
 
 const formatDateTime = (value) => {
-  if (!value) return "Nunca acessou";
+  if (!value) return "Sem registro";
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
 
-const statusStyle = (status) => {
-  const colors = {
-    ativo: ["#14532d", "#86efac"],
-    trial: ["#1e3a8a", "#93c5fd"],
-    vencido: ["#7c2d12", "#fdba74"],
-    bloqueado: ["#7f1d1d", "#fca5a5"],
-    cancelado: ["#3f3f46", "#d4d4d8"]
+const situationLabel = (tenant) => {
+  const billing = tenant.billing || {};
+  if (!tenant.nextBillingDate) return { text: "Sem vencimento", tone: "muted" };
+  if (billing.blocked) return { text: "Bloqueado", tone: "danger" };
+  if (billing.pastDueDays > 0) return { text: `Vencido ha ${billing.pastDueDays} dia(s)`, tone: "warn" };
+  const due = new Date(`${tenant.nextBillingDate}T23:59:59`);
+  const days = Math.max(0, Math.ceil((due.getTime() - Date.now()) / 86400000));
+  return { text: `Em dia: vence em ${days} dia(s)`, tone: "ok" };
+};
+
+const badgeStyle = (tone) => {
+  const map = {
+    ok: { background: "#bbf7d0", color: "#166534" },
+    warn: { background: "#fed7aa", color: "#9a3412" },
+    danger: { background: "#fecaca", color: "#991b1b" },
+    muted: { background: "#eef2f7", color: "#475569" },
+    online: { background: "#bbf7d0", color: "#166534" },
+    offline: { background: "#eef2f7", color: "#475569" }
   };
-  const [bg, color] = colors[status] || colors.trial;
-  return { background: bg, color };
+  return {
+    ...(map[tone] || map.muted),
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 25,
+    padding: "5px 10px",
+    fontSize: 11,
+    fontWeight: 800,
+    lineHeight: 1.15
+  };
 };
 
 const PlatformAdmin = () => {
   const [tenants, setTenants] = useState([]);
-  const [editingId, setEditingId] = useState("");
   const [expandedId, setExpandedId] = useState("");
   const [planId, setPlanId] = useState("profissional");
   const [status, setStatus] = useState("trial");
@@ -82,25 +127,18 @@ const PlatformAdmin = () => {
       startDate: tenant.startDate || "",
       subscriptionStatus: tenant.subscriptionStatus
     });
-    setEditingId("");
     setMessage("Cliente atualizado.");
-    await load();
-  };
-
-  const setQuickStatus = async (tenant, subscriptionStatus) => {
-    await updateTenantSubscription(tenant.id, { subscriptionStatus });
-    setMessage(`Status alterado para ${subscriptionStatus}.`);
     await load();
   };
 
   const setPaid = async (tenant) => {
     await markTenantPaid(tenant);
-    setMessage("Pagamento confirmado e proxima cobranca atualizada.");
+    setMessage("Pagamento confirmado.");
     await load();
   };
 
   const removeTenant = async (tenant) => {
-    const ok = window.confirm(`Arquivar o cliente ${tenant.name || tenant.companyName}? Ele saira da lista, mas os dados nao serao apagados.`);
+    const ok = window.confirm(`Arquivar ${tenant.name || tenant.companyName}? Os dados ficam guardados, mas ele sai desta lista.`);
     if (!ok) return;
     await archiveTenant(tenant.id);
     setMessage("Cliente arquivado.");
@@ -108,136 +146,122 @@ const PlatformAdmin = () => {
   };
 
   return (
-    <div style={{ animation: "fadeIn 0.5s ease" }}>
-      <div className="page-header">
+    <div style={adminWrap}>
+      <header style={{ background: "#fff7df", borderBottom: "1px solid #fde68a", padding: "14px 18px", display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
         <div>
-          <h1 className="page-title">Admin Orquestra.cs</h1>
-          <p style={{ color: "#aaa", marginTop: 4 }}>Controle comercial de clientes, planos, status, acesso e convites.</p>
+          <h1 style={{ margin: 0, fontSize: 15, fontWeight: 900 }}>Admin Orquestra.cs</h1>
+          <p style={{ margin: "6px 0 0", color: "#334155", fontSize: 12 }}>Controle comercial dos clientes, convites, planos e status de assinatura.</p>
         </div>
-      </div>
+        <button style={{ ...buttonDark, background: "#fff", color: "#0f172a", border: "1px solid #cbd5e1" }} onClick={load}>
+          <RefreshCw size={14} /> Atualizar
+        </button>
+      </header>
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        <h2 style={{ marginTop: 0 }}>Novo convite comercial</h2>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+      <section style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: 18 }}>
+        <h2 style={{ margin: 0, fontSize: 14, fontWeight: 900 }}>Novo convite comercial</h2>
+        <p style={{ margin: "6px 0 14px", color: "#475569", fontSize: 12 }}>Use este convite para a cliente criar a propria empresa com o plano liberado por voce.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
           <select style={inputStyle} value={planId} onChange={(event) => setPlanId(event.target.value)}>
-            {Object.entries(PLANS).map(([id, plan]) => <option key={id} value={id}>{plan.label}</option>)}
+            {Object.entries(PLANS).map(([id, plan]) => <option key={id} value={id}>{plan.label} - {plan.monthlyPrice}</option>)}
           </select>
           <select style={inputStyle} value={status} onChange={(event) => setStatus(event.target.value)}>
             {SUBSCRIPTION_STATUSES.map((item) => <option key={item}>{item}</option>)}
           </select>
           <input style={inputStyle} type="date" value={nextBillingDate} onChange={(event) => setNextBillingDate(event.target.value)} />
-          <button className="action-btn" onClick={generateInvite}>
-            <TicketPlus size={18} /> Gerar convite
+          <button style={buttonDark} onClick={generateInvite}>
+            <TicketPlus size={14} /> Gerar convite
           </button>
         </div>
-        {inviteCode ? (
-          <div style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <strong style={{ fontFamily: "monospace", fontSize: 22 }}>{inviteCode}</strong>
-            <button className="action-btn" onClick={() => navigator.clipboard.writeText(inviteCode)}>
-              <Copy size={16} /> Copiar
-            </button>
+        {inviteCode || message ? (
+          <div style={{ marginTop: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", color: "#166534", fontSize: 12 }}>
+            {inviteCode ? <strong style={{ color: "#020617", fontFamily: "monospace", fontSize: 18 }}>{inviteCode}</strong> : null}
+            {inviteCode ? <button style={{ ...buttonDark, height: 30 }} onClick={() => navigator.clipboard.writeText(inviteCode)}><Copy size={13} /> Copiar</button> : null}
+            {message ? <span>{message}</span> : null}
           </div>
         ) : null}
-        {message ? <p style={{ color: "#a7f3d0" }}>{message}</p> : null}
-      </div>
+      </section>
 
-      <div style={{ display: "grid", gap: 16 }}>
-        {tenants.map((tenant) => {
-          const billing = tenant.billing || {};
-          const effectiveStatus = billing.effectiveStatus || tenant.subscriptionStatus || "trial";
-          const editing = editingId === tenant.id;
-          const expanded = expandedId === tenant.id;
-          const plan = PLANS[tenant.planId] || PLANS.profissional;
+      <section style={{ padding: 18 }}>
+        <div style={{ overflowX: "auto", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+          <table style={{ width: "100%", minWidth: 1180, borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: "#f8fafc", color: "#334155", textAlign: "left" }}>
+                <Th>Cliente</Th>
+                <Th>Plano</Th>
+                <Th>Status</Th>
+                <Th>Vencimento</Th>
+                <Th>Inscricao</Th>
+                <Th>Situacao calculada</Th>
+                <Th>Ultimo acesso</Th>
+                <Th>Online</Th>
+                <Th>Creditos IA</Th>
+                <Th>Acao</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {tenants.map((tenant) => {
+                const plan = PLANS[tenant.planId] || PLANS.profissional;
+                const sit = situationLabel(tenant);
+                const aiLimit = plan.limits.aiCredits || 0;
 
-          return (
-            <section key={tenant.id} className="card" style={{ display: "grid", gap: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
-                <div>
-                  {editing ? (
-                    <input style={{ ...inputStyle, minWidth: 280 }} value={tenant.name || ""} onChange={(event) => updateTenantLocal(tenant.id, { name: event.target.value })} />
-                  ) : (
-                    <h2 style={{ margin: 0 }}>{tenant.name || tenant.companyName || tenant.id}</h2>
-                  )}
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                    <span style={{ ...statusStyle(effectiveStatus), padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: 800 }}>
-                      {billing.paid ? "pago" : effectiveStatus}
-                    </span>
-                    <span style={{ background: tenant.online ? "#14532d" : "rgba(255,255,255,0.08)", color: tenant.online ? "#86efac" : "#bbb", padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: 800 }}>
-                      {tenant.online ? `online (${tenant.onlineUsers})` : "offline"}
-                    </span>
-                    {billing.warning ? (
-                      <span style={{ background: "#7c2d12", color: "#fdba74", padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: 800 }}>
-                        bloqueia em {billing.daysUntilBlock} dia(s)
-                      </span>
+                return (
+                  <React.Fragment key={tenant.id}>
+                    <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                      <Td>
+                        <strong style={{ display: "block", color: "#020617", fontSize: 13 }}>{tenant.name || tenant.companyName || tenant.id}</strong>
+                        <span style={{ color: "#64748b", fontSize: 11 }}>{tenant.id}</span>
+                      </Td>
+                      <Td>
+                        <select style={inputStyle} value={tenant.planId || "profissional"} onChange={(event) => updateTenantLocal(tenant.id, { planId: event.target.value })}>
+                          {Object.entries(PLANS).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}
+                        </select>
+                      </Td>
+                      <Td>
+                        <select style={inputStyle} value={tenant.subscriptionStatus || "trial"} onChange={(event) => updateTenantLocal(tenant.id, { subscriptionStatus: event.target.value })}>
+                          {SUBSCRIPTION_STATUSES.map((item) => <option key={item}>{item}</option>)}
+                        </select>
+                      </Td>
+                      <Td>
+                        <input style={inputStyle} type="date" value={tenant.nextBillingDate || ""} onChange={(event) => updateTenantLocal(tenant.id, { nextBillingDate: event.target.value })} />
+                      </Td>
+                      <Td>
+                        <input style={inputStyle} type="date" value={tenant.startDate || ""} onChange={(event) => updateTenantLocal(tenant.id, { startDate: event.target.value })} />
+                      </Td>
+                      <Td><span style={badgeStyle(sit.tone)}>{sit.text}</span></Td>
+                      <Td>{formatDateTime(tenant.lastAccessAt || tenant.lastSeenAt)}</Td>
+                      <Td><span style={badgeStyle(tenant.online ? "online" : "offline")}>{tenant.online ? `Online agora` : "Offline"}</span></Td>
+                      <Td>{aiLimit ? `${aiLimit}/${aiLimit}` : "0/0"}</Td>
+                      <Td>
+                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                          <button style={buttonDark} onClick={() => saveTenant(tenant)}><Save size={13} /> Salvar</button>
+                          <button style={{ ...buttonDark, background: "#166534" }} onClick={() => setPaid(tenant)} title="Marcar como pago"><CheckCircle2 size={13} /></button>
+                          <button style={{ ...buttonDark, background: "#475569" }} onClick={() => setExpandedId(expandedId === tenant.id ? "" : tenant.id)} title="Ver detalhes"><Eye size={13} /></button>
+                          <button style={{ ...buttonDark, background: "#991b1b" }} onClick={() => removeTenant(tenant)} title="Arquivar cliente"><Archive size={13} /></button>
+                        </div>
+                      </Td>
+                    </tr>
+                    {expandedId === tenant.id ? (
+                      <tr style={{ background: "#f8fafc" }}>
+                        <td colSpan="10" style={{ padding: "12px 14px", color: "#334155", borderTop: "1px solid #e5e7eb" }}>
+                          Inicio: {formatDate(tenant.startDate)} | Vencimento mensal: dia {tenant.billingDay || 15} | Ultima presenca: {formatDateTime(tenant.lastSeenAt)} | Usuarios: {tenant.users?.length || 0}
+                        </td>
+                      </tr>
                     ) : null}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  <button className="action-btn" onClick={() => setExpandedId(expanded ? "" : tenant.id)} style={{ background: "rgba(255,255,255,0.08)" }}>
-                    <Eye size={16} /> Status
-                  </button>
-                  <button className="action-btn" onClick={() => setEditingId(editing ? "" : tenant.id)} style={{ background: "rgba(255,255,255,0.08)" }}>
-                    <Edit3 size={16} /> Editar
-                  </button>
-                  {editing ? (
-                    <button className="action-btn" onClick={() => saveTenant(tenant)}>
-                      <Save size={16} /> Salvar
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
-                <Info label="Plano" value={editing ? (
-                  <select style={inputStyle} value={tenant.planId || "profissional"} onChange={(event) => updateTenantLocal(tenant.id, { planId: event.target.value })}>
-                    {Object.entries(PLANS).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}
-                  </select>
-                ) : `${plan.label} - ${plan.monthlyPrice}`} />
-                <Info label="Inicio como cliente" value={editing ? <input style={inputStyle} type="date" value={tenant.startDate || ""} onChange={(event) => updateTenantLocal(tenant.id, { startDate: event.target.value })} /> : formatDate(tenant.startDate)} />
-                <Info label="Vencimento mensal" value={editing ? <input style={inputStyle} type="number" min="1" max="28" value={tenant.billingDay || 15} onChange={(event) => updateTenantLocal(tenant.id, { billingDay: event.target.value })} /> : `Todo dia ${tenant.billingDay || 15}`} />
-                <Info label="Proxima cobranca" value={editing ? <input style={inputStyle} type="date" value={tenant.nextBillingDate || ""} onChange={(event) => updateTenantLocal(tenant.id, { nextBillingDate: event.target.value })} /> : formatDate(tenant.nextBillingDate)} />
-                <Info label="Ultimo acesso" value={formatDateTime(tenant.lastAccessAt || tenant.lastSeenAt)} />
-              </div>
-
-              {expanded ? (
-                <div style={{ background: "rgba(0,0,0,0.18)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: 14, color: "#ccc" }}>
-                  {billing.paid ? "Cliente em dia." : null}
-                  {billing.pastDueDays > 0 ? `Vencido ha ${billing.pastDueDays} dia(s). ` : null}
-                  {billing.daysUntilBlock ? `Bloqueio automatico em ${billing.daysUntilBlock} dia(s).` : null}
-                  {billing.blocked ? "Acesso bloqueado para o cliente." : null}
-                  {!billing.paid && !billing.pastDueDays && !billing.blocked ? "Acompanhe plano, vencimento e acessos deste cliente." : null}
-                </div>
+                  </React.Fragment>
+                );
+              })}
+              {!tenants.length ? (
+                <tr><td colSpan="10" style={{ padding: 24, textAlign: "center", color: "#64748b" }}>Nenhum cliente encontrado.</td></tr>
               ) : null}
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button className="action-btn" onClick={() => setPaid(tenant)}>
-                  <CheckCircle2 size={16} /> Pago
-                </button>
-                <button className="action-btn" onClick={() => setQuickStatus(tenant, "vencido")} style={{ background: "#92400e" }}>
-                  Vencido
-                </button>
-                <button className="action-btn" onClick={() => setQuickStatus(tenant, effectiveStatus === "bloqueado" ? "ativo" : "bloqueado")} style={{ background: "#7f1d1d" }}>
-                  <Ban size={16} /> {effectiveStatus === "bloqueado" ? "Desbloquear" : "Bloquear"}
-                </button>
-                <button className="action-btn" onClick={() => removeTenant(tenant)} style={{ background: "rgba(220,38,38,0.75)" }}>
-                  <Trash2 size={16} /> Excluir
-                </button>
-              </div>
-            </section>
-          );
-        })}
-        {!tenants.length ? <div className="card" style={{ color: "#aaa", textAlign: "center" }}>Nenhum cliente encontrado.</div> : null}
-      </div>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 };
 
-const Info = ({ label, value }) => (
-  <div style={{ display: "grid", gap: 6 }}>
-    <span style={{ color: "#888", fontSize: 12, textTransform: "uppercase", fontWeight: 800 }}>{label}</span>
-    <div style={{ color: "#f5f5f5", minHeight: 42, display: "flex", alignItems: "center" }}>{value}</div>
-  </div>
-);
+const Th = ({ children }) => <th style={{ padding: "12px 14px", fontSize: 12, fontWeight: 900, whiteSpace: "nowrap" }}>{children}</th>;
+const Td = ({ children }) => <td style={{ padding: "11px 14px", verticalAlign: "middle", color: "#0f172a" }}>{children}</td>;
 
 export default PlatformAdmin;
