@@ -28,10 +28,30 @@ const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 let presenceTimer = null;
 
 export const PLANS = {
-  starter: { label: "Starter", monthlyPrice: "R$ 97", limits: { users: 2, vehicles: 200, appointments: 150, aiCredits: 0 }, features: ["Agenda", "Clientes e veiculos", "Catalogo de servicos", "Backup local"] },
-  medium: { label: "Medium", monthlyPrice: "R$ 197", limits: { users: 5, vehicles: 1000, appointments: 800, aiCredits: 30 }, features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Assistente IA inicial"] },
-  profissional: { label: "Profissional", monthlyPrice: "R$ 197", limits: { users: 5, vehicles: 1000, appointments: 800, aiCredits: 30 }, features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Assistente IA inicial"] },
-  premium: { label: "Premium", monthlyPrice: "R$ 397", limits: { users: 12, vehicles: 5000, appointments: 3000, aiCredits: 120 }, features: ["Tudo do Medium", "Multiunidade", "Prioridade no suporte", "Assistente IA avancado"] }
+  starter: {
+    label: "Starter",
+    monthlyPrice: "R$ 75",
+    limits: { users: 1, vehicles: 70, appointments: 150, aiCredits: 0 },
+    features: ["Agenda", "Clientes e veiculos", "Catalogo de servicos"]
+  },
+  medium: {
+    label: "Medium",
+    monthlyPrice: "R$ 120",
+    limits: { users: 3, vehicles: 300, appointments: 350, aiCredits: 25 },
+    features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Prioridade no suporte", "Assistente IA inicial"]
+  },
+  profissional: {
+    label: "Medium",
+    monthlyPrice: "R$ 120",
+    limits: { users: 3, vehicles: 300, appointments: 350, aiCredits: 25 },
+    features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Prioridade no suporte", "Assistente IA inicial"]
+  },
+  premium: {
+    label: "Premium",
+    monthlyPrice: "R$ 299",
+    limits: { users: 8, vehicles: 500, appointments: 800, aiCredits: 120 },
+    features: ["Tudo do Medium", "Multiunidade", "Prioridade no suporte", "Assistente IA avancado"]
+  }
 };
 
 export function daysPastDue(nextBillingDate, now = new Date()) {
