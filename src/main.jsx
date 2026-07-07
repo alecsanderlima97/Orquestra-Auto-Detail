@@ -3,8 +3,16 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
+const CACHE_VERSION = '2026-07-07-firebase-env-clean';
+
 async function clearLocalPwaCacheBeforeRender() {
-  if (!import.meta.env.DEV || !('serviceWorker' in navigator)) return;
+  if (!('serviceWorker' in navigator)) return;
+
+  const shouldClear =
+    import.meta.env.DEV ||
+    localStorage.getItem('app-cache-version') !== CACHE_VERSION;
+
+  if (!shouldClear) return;
 
   const hadController = Boolean(navigator.serviceWorker.controller);
   const registrations = await navigator.serviceWorker.getRegistrations();
@@ -15,8 +23,10 @@ async function clearLocalPwaCacheBeforeRender() {
     await Promise.all(keys.map((key) => caches.delete(key)));
   }
 
-  if (hadController && sessionStorage.getItem('pwa-cache-cleared') !== 'true') {
-    sessionStorage.setItem('pwa-cache-cleared', 'true');
+  localStorage.setItem('app-cache-version', CACHE_VERSION);
+
+  if (hadController && sessionStorage.getItem('pwa-cache-cleared') !== CACHE_VERSION) {
+    sessionStorage.setItem('pwa-cache-cleared', CACHE_VERSION);
     window.location.replace(`${window.location.origin}${window.location.pathname}?cache=limpo`);
     return new Promise(() => {});
   }
