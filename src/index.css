@@ -905,6 +905,148 @@ body {
   z-index: 1;
 }
 
+.guide-assistant {
+  position: fixed;
+  right: 24px;
+  bottom: 96px;
+  z-index: 1300;
+  width: min(385px, calc(100vw - 40px));
+  overflow: hidden;
+  border: 1px solid #a5f3fc;
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.36);
+  animation: slideUp 0.25s ease-out;
+}
+
+.guide-assistant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #020617;
+  color: #fff;
+  padding: 12px 14px;
+}
+
+.guide-assistant-header button {
+  border: none;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.guide-assistant-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.guide-assistant-title strong,
+.guide-assistant-title span {
+  display: block;
+}
+
+.guide-assistant-title strong {
+  font-size: 14px;
+}
+
+.guide-assistant-title span {
+  color: #cbd5e1;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.guide-assistant-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: #22d3ee;
+  color: #020617;
+}
+
+.guide-assistant-body {
+  padding: 16px;
+}
+
+.guide-assistant-body h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.guide-assistant-body p {
+  margin: 8px 0 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.guide-assistant-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.guide-assistant-actions > div {
+  display: flex;
+  gap: 8px;
+}
+
+.guide-skip,
+.guide-nav,
+.guide-next,
+.guide-finish {
+  border: none;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.guide-skip {
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.guide-nav {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.guide-nav:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.guide-next,
+.guide-finish {
+  min-height: 34px;
+  border-radius: 6px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #fff;
+  font-size: 12px;
+}
+
+.guide-next {
+  background: #0e7490;
+}
+
+.guide-finish {
+  background: #047857;
+}
+
 @media (max-width: 768px) {
   .ai-floating-btn {
     right: 16px;
@@ -922,5 +1064,20 @@ body {
     width: 100%;
     max-height: calc(100vh - 24px);
     padding: 18px;
+  }
+
+  .guide-assistant {
+    right: 12px;
+    bottom: 84px;
+    width: calc(100vw - 24px);
+  }
+
+  .guide-assistant-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .guide-assistant-actions > div {
+    justify-content: flex-end;
   }
 }

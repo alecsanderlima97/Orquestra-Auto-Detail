@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import Calculator from './Calculator';
 import Footer from './Footer';
+import GuideAssistant from './GuideAssistant';
 import AiAssistant from '../pages/AiAssistant';
 import { Bot, X } from 'lucide-react';
 import { getSubscriptionAccess } from '../services/commercialService';
@@ -63,6 +64,8 @@ const MainLayout = () => {
 
       {!access.blocked || currentUser?.role === 'dev' ? (
         <>
+          <GuideAssistant userId={currentUser?.id} />
+
           <button
             className="ai-floating-btn"
             onClick={() => setShowAssistant(true)}
