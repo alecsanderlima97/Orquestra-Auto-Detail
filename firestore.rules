@@ -10,6 +10,10 @@ service cloud.firestore {
       return signedIn() && request.auth.token.email == "orquestracs@gmail.com";
     }
 
+    function isOwnerRole(role) {
+      return role in ["Proprietario", "Proprietário", "ProprietÃ¡rio"];
+    }
+
     function isTenantUser(tenantId) {
       return signedIn() && exists(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid));
     }
@@ -19,11 +23,11 @@ service cloud.firestore {
     }
 
     function canWriteTenant(tenantId) {
-      return isTenantUser(tenantId) && tenantRole(tenantId) in ["Proprietário", "Financeiro"];
+      return isTenantUser(tenantId) && (isOwnerRole(tenantRole(tenantId)) || tenantRole(tenantId) == "Financeiro");
     }
 
     function canManageTenant(tenantId) {
-      return isTenantUser(tenantId) && tenantRole(tenantId) == "Proprietário";
+      return isTenantUser(tenantId) && isOwnerRole(tenantRole(tenantId));
     }
 
     match /invites/{code} {
