@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Bot, CalendarClock, Lightbulb, Megaphone, PackageSearch, Send, TrendingUp } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { auth } from '../firebase/firebaseConfig';
 import { PLANS } from '../services/commercialService';
 
 const prompts = [
@@ -18,6 +19,9 @@ const AiAssistant = () => {
   const aiCredits = plan.limits.aiCredits || 0;
   const [question, setQuestion] = useState('');
   const [selectedPrompt, setSelectedPrompt] = useState(prompts[0]);
+  const [answer, setAnswer] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const snapshot = useMemo(() => {
     const lowStock = estoque.filter((item) => Number(item.quantidade) <= Number(item.minimo));
@@ -42,7 +46,48 @@ const AiAssistant = () => {
 
   const previewAnswer = aiCredits <= 0
     ? 'Seu plano atual nao inclui creditos de IA. Faca upgrade para liberar o assistente.'
-    : 'Base pronta. A proxima etapa e conectar este painel a uma Function segura com OPENAI_API_KEY protegida.';
+    : 'Pronto para gerar analises com IA usando os dados resumidos do seu sistema.';
+
+  const handleGenerate = async () => {
+    const prompt = (question || selectedPrompt.text).trim();
+
+    if (!prompt || aiCredits <= 0) return;
+
+    setLoading(true);
+    setError('');
+    setAnswer('');
+
+    try {
+      const token = await auth?.currentUser?.getIdToken();
+      if (!token) {
+        throw new Error('Entre novamente para usar o assistente.');
+      }
+
+      const response = await fetch('/api/ai-assistant', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          planLabel: plan.label,
+          question: prompt,
+          snapshot
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'Nao foi possivel gerar a analise.');
+      }
+
+      setAnswer(data.answer);
+    } catch (err) {
+      setError(err.message || 'Falha ao gerar a analise.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div style={{ animation: 'fadeIn 0.5s ease' }}>
@@ -96,12 +141,17 @@ const AiAssistant = () => {
             style={{ width: '100%', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', color: 'white', padding: 14, resize: 'vertical' }}
           />
 
-          <button className="action-btn" disabled={aiCredits <= 0} style={{ marginTop: 14, opacity: aiCredits <= 0 ? 0.55 : 1 }}>
-            <Send size={18} /> Gerar analise
+          <button
+            className="action-btn"
+            disabled={aiCredits <= 0 || loading}
+            onClick={handleGenerate}
+            style={{ marginTop: 14, opacity: aiCredits <= 0 || loading ? 0.55 : 1 }}
+          >
+            <Send size={18} /> {loading ? 'Gerando...' : 'Gerar analise'}
           </button>
 
           <div style={{ marginTop: 18, borderRadius: 12, background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', padding: 16, color: '#ddd', lineHeight: 1.6 }}>
-            {previewAnswer}
+            {error || answer || previewAnswer}
           </div>
         </section>
 
