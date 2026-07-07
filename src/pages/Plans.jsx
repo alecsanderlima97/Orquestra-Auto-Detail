@@ -47,7 +47,7 @@ const Plans = () => {
       </section>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18 }}>
-        {Object.entries(PLANS).filter(([id]) => id !== 'profissional').map(([id, plan]) => (
+        {Object.entries(PLANS).map(([id, plan]) => (
           <article key={id} style={{ ...cardStyle, borderColor: currentUser?.planId === id ? 'var(--primary-color)' : 'rgba(255,255,255,0.08)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <h3 style={{ margin: 0, fontSize: 22 }}>{plan.label}</h3>

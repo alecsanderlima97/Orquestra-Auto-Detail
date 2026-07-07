@@ -40,12 +40,6 @@ export const PLANS = {
     limits: { users: 3, vehicles: 300, appointments: 350, aiCredits: 25 },
     features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Prioridade no suporte", "Assistente IA inicial"]
   },
-  profissional: {
-    label: "Medium",
-    monthlyPrice: "R$ 120",
-    limits: { users: 3, vehicles: 300, appointments: 350, aiCredits: 25 },
-    features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Prioridade no suporte", "Assistente IA inicial"]
-  },
   premium: {
     label: "Premium",
     monthlyPrice: "R$ 299",
@@ -135,7 +129,7 @@ function normalizeInvite(snapshot) {
   return invite;
 }
 
-export async function createCommercialInvite(planId = "profissional", subscriptionStatus = "trial", nextBillingDate = "") {
+export async function createCommercialInvite(planId = "medium", subscriptionStatus = "trial", nextBillingDate = "") {
   if (!firebaseReady || !db) throw new Error("Configure um novo projeto Firebase no .env antes de gerar convites.");
   const code = createCode();
   const invite = {
@@ -188,7 +182,7 @@ export async function registerWithInvite({ companyName, email, name, password, i
     role: invite.role,
     tenantId,
     companyName: finalCompanyName,
-    planId: invite.planId || "profissional",
+    planId: invite.planId || "medium",
     subscriptionStatus: invite.subscriptionStatus || "trial",
     nextBillingDate: invite.nextBillingDate || ""
   };
@@ -256,7 +250,7 @@ export async function loadUserMembership(userId) {
     tenantId,
     companyName: tenant.name || membership.companyName || "Empresa",
     role: membership.role || "Consulta",
-    planId: tenant.planId || membership.planId || "profissional",
+    planId: tenant.planId || membership.planId || "medium",
     subscriptionStatus: tenant.subscriptionStatus || membership.subscriptionStatus || "trial",
     nextBillingDate: tenant.nextBillingDate || ""
   };

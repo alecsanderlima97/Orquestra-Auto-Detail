@@ -99,7 +99,7 @@ const PlatformAdmin = () => {
   const [tenants, setTenants] = useState([]);
   const [expandedId, setExpandedId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [planId, setPlanId] = useState("profissional");
+  const [planId, setPlanId] = useState("medium");
   const [status, setStatus] = useState("trial");
   const [nextBillingDate, setNextBillingDate] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -219,7 +219,7 @@ const PlatformAdmin = () => {
             </thead>
             <tbody>
               {tenants.map((tenant) => {
-                const plan = PLANS[tenant.planId] || PLANS.profissional;
+                const plan = PLANS[tenant.planId] || PLANS.medium;
                 const sit = situationLabel(tenant);
                 const aiLimit = plan.limits.aiCredits || 0;
 
@@ -231,7 +231,7 @@ const PlatformAdmin = () => {
                         <span style={{ color: "#64748b", fontSize: 11 }}>{tenant.id}</span>
                       </Td>
                       <Td>
-                        <select style={inputStyle} value={tenant.planId || "profissional"} onChange={(event) => updateTenantLocal(tenant.id, { planId: event.target.value })}>
+                        <select style={inputStyle} value={tenant.planId || "medium"} onChange={(event) => updateTenantLocal(tenant.id, { planId: event.target.value })}>
                           {Object.entries(PLANS).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}
                         </select>
                       </Td>
