@@ -15,7 +15,15 @@ const adminWrap = {
   color: "#020617",
   margin: "-40px",
   minHeight: "calc(100vh - 80px)",
-  paddingBottom: 28
+  padding: 18
+};
+
+const panelStyle = {
+  background: "#fff",
+  border: "1px solid #fde68a",
+  borderRadius: 10,
+  boxShadow: "0 1px 3px rgba(15,23,42,0.08)",
+  overflow: "hidden"
 };
 
 const inputStyle = {
@@ -90,6 +98,7 @@ const badgeStyle = (tone) => {
 const PlatformAdmin = () => {
   const [tenants, setTenants] = useState([]);
   const [expandedId, setExpandedId] = useState("");
+  const [loading, setLoading] = useState(true);
   const [planId, setPlanId] = useState("profissional");
   const [status, setStatus] = useState("trial");
   const [nextBillingDate, setNextBillingDate] = useState("");
@@ -97,11 +106,19 @@ const PlatformAdmin = () => {
   const [message, setMessage] = useState("");
 
   const load = async () => {
-    setTenants(await listPlatformTenants());
+    setLoading(true);
+    setMessage("");
+    try {
+      setTenants(await listPlatformTenants());
+    } catch {
+      setMessage("Nao foi possivel carregar clientes.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    load().catch(() => setMessage("Configure o Firebase para carregar clientes."));
+    load();
   }, []);
 
   const updateTenantLocal = (tenantId, updates) => {
@@ -147,42 +164,44 @@ const PlatformAdmin = () => {
 
   return (
     <div style={adminWrap}>
-      <header style={{ background: "#fff7df", borderBottom: "1px solid #fde68a", padding: "14px 18px", display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 15, fontWeight: 900 }}>Admin Orquestra.cs</h1>
-          <p style={{ margin: "6px 0 0", color: "#334155", fontSize: 12 }}>Controle comercial dos clientes, convites, planos e status de assinatura.</p>
-        </div>
-        <button style={{ ...buttonDark, background: "#fff", color: "#0f172a", border: "1px solid #cbd5e1" }} onClick={load}>
-          <RefreshCw size={14} /> Atualizar
-        </button>
-      </header>
-
-      <section style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: 18 }}>
-        <h2 style={{ margin: 0, fontSize: 14, fontWeight: 900 }}>Novo convite comercial</h2>
-        <p style={{ margin: "6px 0 14px", color: "#475569", fontSize: 12 }}>Use este convite para a cliente criar a propria empresa com o plano liberado por voce.</p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
-          <select style={inputStyle} value={planId} onChange={(event) => setPlanId(event.target.value)}>
-            {Object.entries(PLANS).map(([id, plan]) => <option key={id} value={id}>{plan.label} - {plan.monthlyPrice}</option>)}
-          </select>
-          <select style={inputStyle} value={status} onChange={(event) => setStatus(event.target.value)}>
-            {SUBSCRIPTION_STATUSES.map((item) => <option key={item}>{item}</option>)}
-          </select>
-          <input style={inputStyle} type="date" value={nextBillingDate} onChange={(event) => setNextBillingDate(event.target.value)} />
-          <button style={buttonDark} onClick={generateInvite}>
-            <TicketPlus size={14} /> Gerar convite
-          </button>
-        </div>
-        {inviteCode || message ? (
-          <div style={{ marginTop: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", color: "#166534", fontSize: 12 }}>
-            {inviteCode ? <strong style={{ color: "#020617", fontFamily: "monospace", fontSize: 18 }}>{inviteCode}</strong> : null}
-            {inviteCode ? <button style={{ ...buttonDark, height: 30 }} onClick={() => navigator.clipboard.writeText(inviteCode)}><Copy size={13} /> Copiar</button> : null}
-            {message ? <span>{message}</span> : null}
+      <section style={panelStyle}>
+        <header style={{ background: "#fffbeb", borderBottom: "1px solid #fde68a", padding: "16px 20px", display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 15, fontWeight: 900 }}>Admin Orquestra.cs</h1>
+            <p style={{ margin: "6px 0 0", color: "#475569", fontSize: 13 }}>Controle comercial dos clientes, convites, planos e status de assinatura.</p>
           </div>
-        ) : null}
-      </section>
+          <button style={{ ...buttonDark, background: "#fff", color: "#78350f", border: "1px solid #fcd34d" }} disabled={loading} onClick={load}>
+            <RefreshCw size={14} /> Atualizar
+          </button>
+        </header>
 
-      <section style={{ padding: 18 }}>
-        <div style={{ overflowX: "auto", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8 }}>
+        <div style={{ borderBottom: "1px solid #f1f5f9", padding: 20 }}>
+          <h2 style={{ margin: 0, fontSize: 14, fontWeight: 900 }}>Novo convite comercial</h2>
+          <p style={{ margin: "6px 0 14px", color: "#475569", fontSize: 13 }}>Use este convite para a cliente criar a propria empresa com o plano liberado por voce.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+            <select style={inputStyle} value={planId} onChange={(event) => setPlanId(event.target.value)}>
+              {Object.entries(PLANS).map(([id, plan]) => <option key={id} value={id}>{plan.label} - {plan.monthlyPrice}</option>)}
+            </select>
+            <select style={inputStyle} value={status} onChange={(event) => setStatus(event.target.value)}>
+              {SUBSCRIPTION_STATUSES.map((item) => <option key={item}>{item}</option>)}
+            </select>
+            <input style={inputStyle} type="date" value={nextBillingDate} onChange={(event) => setNextBillingDate(event.target.value)} />
+            <button style={buttonDark} onClick={generateInvite}>
+              <TicketPlus size={14} /> Gerar convite
+            </button>
+          </div>
+          {inviteCode ? (
+            <div style={{ marginTop: 14, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", background: "#ecfeff", border: "1px solid #cffafe", borderRadius: 6, padding: "12px 14px", color: "#155e75", fontSize: 12 }}>
+              <span>Codigo:</span>
+              <strong style={{ color: "#020617", fontFamily: "monospace", fontSize: 18, letterSpacing: 1 }}>{inviteCode}</strong>
+              <button style={{ ...buttonDark, height: 30, background: "#fff", color: "#164e63", border: "1px solid #a5f3fc" }} onClick={() => navigator.clipboard.writeText(inviteCode)}>
+                <Copy size={13} /> Copiar
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", minWidth: 1180, borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ background: "#f8fafc", color: "#334155", textAlign: "left" }}>
@@ -251,11 +270,12 @@ const PlatformAdmin = () => {
                 );
               })}
               {!tenants.length ? (
-                <tr><td colSpan="10" style={{ padding: 24, textAlign: "center", color: "#64748b" }}>Nenhum cliente encontrado.</td></tr>
+                <tr><td colSpan="10" style={{ padding: 28, textAlign: "center", color: "#64748b" }}>{loading ? "Carregando clientes..." : "Nenhum cliente encontrado."}</td></tr>
               ) : null}
             </tbody>
           </table>
         </div>
+        {message ? <p style={{ borderTop: "1px solid #f1f5f9", margin: 0, padding: "12px 20px", color: "#334155", fontSize: 13, fontWeight: 700 }}>{message}</p> : null}
       </section>
     </div>
   );
