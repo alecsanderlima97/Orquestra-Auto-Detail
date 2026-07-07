@@ -12,7 +12,7 @@ const prompts = [
   { id: 'servicos', icon: Lightbulb, title: 'Servicos', text: 'Sugira combos e upgrades para aumentar o ticket medio.' }
 ];
 
-const AiAssistant = () => {
+const AiAssistant = ({ compact = false }) => {
   const { agendamentos, clientes, estoque, financeiro, servicos } = useData();
   const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
   const plan = PLANS[currentUser?.planId] || PLANS.medium;
@@ -91,24 +91,24 @@ const AiAssistant = () => {
 
   return (
     <div style={{ animation: 'fadeIn 0.5s ease' }}>
-      <div className="page-header">
+      <div className="page-header" style={compact ? { marginBottom: 18 } : undefined}>
         <div>
-          <h1 className="page-title">Assistente IA</h1>
-          <p style={{ color: '#aaa', marginTop: 4 }}>Analises, campanhas e decisoes comerciais para estetica automotiva.</p>
+          <h1 className="page-title" style={compact ? { fontSize: 22 } : undefined}>Assistente IA</h1>
+          <p style={{ color: '#aaa', marginTop: 4 }}>Analises, campanhas e decisoes comerciais.</p>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 22 }}>
-        <section className="card">
+      <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : 'minmax(0, 1fr) 320px', gap: 22 }}>
+        <section className={compact ? '' : 'card'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
             <Bot size={26} color="var(--primary-color)" />
             <div>
-              <h2 style={{ margin: 0, fontSize: 22 }}>Central inteligente</h2>
+              <h2 style={{ margin: 0, fontSize: compact ? 18 : 22 }}>Central inteligente</h2>
               <p style={{ color: '#888', margin: '4px 0 0', fontSize: 13 }}>Escolha uma analise ou escreva sua pergunta.</p>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr 1fr' : 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 18 }}>
             {prompts.map((prompt) => {
               const Icon = prompt.icon;
               const active = selectedPrompt.id === prompt.id;
@@ -128,7 +128,7 @@ const AiAssistant = () => {
                 >
                   <Icon size={18} color="var(--primary-color)" />
                   <strong style={{ display: 'block', marginTop: 8 }}>{prompt.title}</strong>
-                  <span style={{ display: 'block', color: '#999', fontSize: 12, marginTop: 4 }}>{prompt.text}</span>
+                  {!compact ? <span style={{ display: 'block', color: '#999', fontSize: 12, marginTop: 4 }}>{prompt.text}</span> : null}
                 </button>
               );
             })}
@@ -155,7 +155,7 @@ const AiAssistant = () => {
           </div>
         </section>
 
-        <aside className="card">
+        {!compact ? <aside className="card">
           <h3 style={{ marginTop: 0 }}>Creditos IA</h3>
           <strong style={{ fontSize: 34 }}>{aiCredits}</strong>
           <p style={{ color: '#aaa' }}>creditos mensais no plano {plan.label}</p>
@@ -167,7 +167,7 @@ const AiAssistant = () => {
             <span>Receitas mes: R$ {snapshot.receitasMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
             <span>Despesas mes: R$ {snapshot.despesasMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
           </div>
-        </aside>
+        </aside> : null}
       </div>
     </div>
   );

@@ -4,10 +4,13 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import Calculator from './Calculator';
 import Footer from './Footer';
+import AiAssistant from '../pages/AiAssistant';
+import { Bot, X } from 'lucide-react';
 import { getSubscriptionAccess } from '../services/commercialService';
 
 const MainLayout = () => {
   const [showCalculator, setShowCalculator] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
   const access = getSubscriptionAccess(currentUser);
@@ -57,6 +60,35 @@ const MainLayout = () => {
           <Calculator onClose={() => setShowCalculator(false)} />
         </div>
       )}
+
+      {!access.blocked || currentUser?.role === 'dev' ? (
+        <>
+          <button
+            className="ai-floating-btn"
+            onClick={() => setShowAssistant(true)}
+            title="Abrir Assistente IA"
+            aria-label="Abrir Assistente IA"
+          >
+            <Bot size={24} />
+          </button>
+
+          {showAssistant ? (
+            <div className="ai-panel-overlay" onClick={() => setShowAssistant(false)}>
+              <section className="ai-floating-panel" onClick={(event) => event.stopPropagation()}>
+                <button
+                  className="ai-panel-close"
+                  onClick={() => setShowAssistant(false)}
+                  title="Fechar Assistente IA"
+                  aria-label="Fechar Assistente IA"
+                >
+                  <X size={18} />
+                </button>
+                <AiAssistant compact />
+              </section>
+            </div>
+          ) : null}
+        </>
+      ) : null}
 
       <style>
         {`

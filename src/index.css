@@ -840,3 +840,87 @@ body {
   margin-bottom: 12px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
+
+.ai-floating-btn {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 1200;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.32), 0 0 0 8px rgba(var(--primary-rgb), 0.12);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ai-floating-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 34px rgba(0,0,0,0.38), 0 0 0 10px rgba(var(--primary-rgb), 0.16);
+}
+
+.ai-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  background: rgba(0,0,0,0.42);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  padding: 24px;
+}
+
+.ai-floating-panel {
+  position: relative;
+  width: min(620px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 48px));
+  overflow-y: auto;
+  background: var(--card-bg);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+  padding: 24px;
+  animation: slideUp 0.25s ease-out;
+}
+
+.ai-panel-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 1;
+}
+
+@media (max-width: 768px) {
+  .ai-floating-btn {
+    right: 16px;
+    bottom: 16px;
+    width: 54px;
+    height: 54px;
+  }
+
+  .ai-panel-overlay {
+    padding: 12px;
+    align-items: stretch;
+  }
+
+  .ai-floating-panel {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    padding: 18px;
+  }
+}
