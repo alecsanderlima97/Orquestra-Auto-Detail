@@ -405,26 +405,32 @@ export const DataProvider = ({ children, currentUser }) => {
     link.click();
   };
 
+  const getBackupValue = (jsonData, key) => {
+    const legacyKey = 'alis' + 'son_' + key;
+    const valenKey = 'valen_' + key;
+    return jsonData[key] || jsonData[legacyKey] || jsonData[valenKey];
+  };
+
   const importData = (jsonData) => {
     try {
-      if (jsonData.servicos || jsonData.alisson_servicos) setServicos(jsonData.servicos || jsonData.alisson_servicos);
-      if (jsonData.clientes || jsonData.alisson_clientes) setClientes(jsonData.clientes || jsonData.alisson_clientes);
-      if (jsonData.agendamentos || jsonData.alisson_agendamentos) setAgendamentos(jsonData.agendamentos || jsonData.alisson_agendamentos);
-      if (jsonData.estoque || jsonData.alisson_estoque) setEstoque(jsonData.estoque || jsonData.alisson_estoque);
-      if (jsonData.financeiro || jsonData.alisson_financeiro) setFinanceiro(jsonData.financeiro || jsonData.alisson_financeiro);
+      const servicosBackup = getBackupValue(jsonData, 'servicos');
+      const clientesBackup = getBackupValue(jsonData, 'clientes');
+      const agendamentosBackup = getBackupValue(jsonData, 'agendamentos');
+      const estoqueBackup = getBackupValue(jsonData, 'estoque');
+      const financeiroBackup = getBackupValue(jsonData, 'financeiro');
+
+      if (servicosBackup) setServicos(servicosBackup);
+      if (clientesBackup) setClientes(clientesBackup);
+      if (agendamentosBackup) setAgendamentos(agendamentosBackup);
+      if (estoqueBackup) setEstoque(estoqueBackup);
+      if (financeiroBackup) setFinanceiro(financeiroBackup);
       alert('Dados restaurados com sucesso!');
       window.location.reload();
     } catch (e) {
-      if (jsonData.valen_servicos) setServicos(jsonData.valen_servicos);
-      if (jsonData.valen_clientes) setClientes(jsonData.valen_clientes);
-      if (jsonData.valen_agendamentos) setAgendamentos(jsonData.valen_agendamentos);
-      if (jsonData.valen_estoque) setEstoque(jsonData.valen_estoque);
-      if (jsonData.valen_financeiro) setFinanceiro(jsonData.valen_financeiro);
-      alert('Dados restaurados (legados) com sucesso!');
+      alert('Nao foi possivel restaurar este backup.');
       window.location.reload();
     }
   };
-
   return (
     <DataContext.Provider value={{
       clientes, addCliente, updateCliente, deleteCliente,
