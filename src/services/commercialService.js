@@ -30,19 +30,19 @@ let presenceTimer = null;
 
 export const PLANS = {
   starter: {
-    label: "Starter",
+    label: "Plano Inicial",
     monthlyPrice: "R$ 75",
     limits: { users: 1, vehicles: 70, appointments: 150, aiCredits: 0 },
     features: ["Agenda", "Clientes e veiculos", "Catalogo de servicos"]
   },
   medium: {
-    label: "Medium",
+    label: "Plano Medio",
     monthlyPrice: "R$ 120",
     limits: { users: 3, vehicles: 300, appointments: 350, aiCredits: 15 },
     features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Prioridade no suporte", "Assistente IA inicial"]
   },
   premium: {
-    label: "Premium",
+    label: "Plano Premium",
     monthlyPrice: "R$ 299",
     limits: { users: 8, vehicles: 500, appointments: 800, aiCredits: 120 },
     features: ["Tudo do Medium", "Multiunidade", "Prioridade no suporte", "Assistente IA avancado"]
