@@ -56,6 +56,12 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /aiUsage/{monthId} {
+        allow read: if isPlatformAdmin() || isTenantUser(tenantId);
+        allow create, update: if isPlatformAdmin() || isTenantUser(tenantId);
+        allow delete: if isPlatformAdmin();
+      }
+
       match /{collectionName}/{documentId} {
         allow read: if isPlatformAdmin() || isTenantUser(tenantId);
         allow create, update: if isPlatformAdmin() || canWriteTenant(tenantId);

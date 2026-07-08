@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   orderBy,
   query,
   serverTimestamp,
@@ -37,7 +38,7 @@ export const PLANS = {
   medium: {
     label: "Medium",
     monthlyPrice: "R$ 120",
-    limits: { users: 3, vehicles: 300, appointments: 350, aiCredits: 25 },
+    limits: { users: 3, vehicles: 300, appointments: 350, aiCredits: 15 },
     features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Prioridade no suporte", "Assistente IA inicial"]
   },
   premium: {
@@ -68,6 +69,10 @@ function addMonths(dateString, months = 1) {
   if (Number.isNaN(base.getTime())) return "";
   base.setMonth(base.getMonth() + months);
   return base.toISOString().slice(0, 10);
+}
+
+function currentMonthKey(date = new Date()) {
+  return date.toISOString().slice(0, 7);
 }
 
 export function getTenantBillingState(tenant, now = new Date()) {
@@ -327,6 +332,7 @@ export async function listPlatformTenants() {
   const tenants = await Promise.all(snapshot.docs.map(async (item) => {
     const tenant = { id: item.id, ...item.data() };
     const usersSnapshot = await getDocs(collection(db, `${tenantPath(item.id)}/users`)).catch(() => ({ docs: [] }));
+    const aiUsage = await getTenantAiUsage(item.id, tenant.planId);
     const users = usersSnapshot.docs.map((userDoc) => ({ id: userDoc.id, ...userDoc.data() }));
     const lastSeenAt = Math.max(...users.map((user) => timestampToMillis(user.lastSeenAt)), 0);
     const lastAccessAt = Math.max(timestampToMillis(tenant.lastAccessAt), ...users.map((user) => timestampToMillis(user.lastAccessAt)), 0);
@@ -342,6 +348,7 @@ export async function listPlatformTenants() {
       lastSeenAt: lastSeenAt ? new Date(lastSeenAt).toISOString() : "",
       online: onlineUsers.length > 0,
       onlineUsers: onlineUsers.length,
+      aiUsage,
       users
     };
   }));
@@ -351,6 +358,43 @@ export async function listPlatformTenants() {
 
 export async function updateTenantSubscription(tenantId, updates) {
   await updateDoc(doc(db, tenantPath(tenantId)), { ...updates, updatedAt: serverTimestamp() });
+}
+
+export async function getTenantAiUsage(tenantId, planId = "medium") {
+  if (!firebaseReady || !db || !tenantId) {
+    return { limit: 0, monthKey: currentMonthKey(), remaining: 0, used: 0 };
+  }
+
+  const monthKey = currentMonthKey();
+  const limit = PLANS[planId]?.limits?.aiCredits || 0;
+  const snapshot = await getDoc(doc(db, `${tenantPath(tenantId)}/aiUsage/${monthKey}`)).catch(() => null);
+  const used = snapshot?.exists?.() ? Number(snapshot.data().used || 0) : 0;
+
+  return {
+    limit,
+    monthKey,
+    remaining: Math.max(limit - used, 0),
+    used
+  };
+}
+
+export async function registerTenantAiUsage(tenantId, planId = "medium") {
+  if (!firebaseReady || !db || !tenantId) {
+    return { limit: 0, monthKey: currentMonthKey(), remaining: 0, used: 0 };
+  }
+
+  const monthKey = currentMonthKey();
+  const limit = PLANS[planId]?.limits?.aiCredits || 0;
+
+  await setDoc(doc(db, `${tenantPath(tenantId)}/aiUsage/${monthKey}`), {
+    limit,
+    monthKey,
+    planId,
+    updatedAt: serverTimestamp(),
+    used: increment(1)
+  }, { merge: true });
+
+  return getTenantAiUsage(tenantId, planId);
 }
 
 export async function markTenantPaid(tenant) {

@@ -222,6 +222,8 @@ const PlatformAdmin = () => {
                 const plan = PLANS[tenant.planId] || PLANS.medium;
                 const sit = situationLabel(tenant);
                 const aiLimit = plan.limits.aiCredits || 0;
+                const aiUsed = tenant.aiUsage?.used || 0;
+                const aiUsageText = `${aiUsed}/${aiLimit}`;
 
                 return (
                   <React.Fragment key={tenant.id}>
@@ -249,7 +251,7 @@ const PlatformAdmin = () => {
                       <Td><span style={badgeStyle(sit.tone)}>{sit.text}</span></Td>
                       <Td>{formatDateTime(tenant.lastAccessAt || tenant.lastSeenAt)}</Td>
                       <Td><span style={badgeStyle(tenant.online ? "online" : "offline")}>{tenant.online ? `Online agora` : "Offline"}</span></Td>
-                      <Td>{aiLimit ? `${aiLimit}/${aiLimit}` : "0/0"}</Td>
+                      <Td>{aiUsageText}</Td>
                       <Td>
                         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                           <button style={buttonDark} onClick={() => saveTenant(tenant)}><Save size={13} /> Salvar</button>
