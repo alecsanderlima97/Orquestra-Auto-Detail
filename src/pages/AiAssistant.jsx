@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bot, CalendarClock, Lightbulb, Megaphone, PackageSearch, Send, TrendingUp } from 'lucide-react';
+import { Bot, CalendarClock, Loader2, Megaphone, PackageSearch, Send, Sparkles, TrendingUp } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { auth } from '../firebase/firebaseConfig';
 import { PLANS, getTenantAiUsage, registerTenantAiUsage } from '../services/commercialService';
@@ -9,19 +9,23 @@ const prompts = [
   { id: 'agenda', icon: CalendarClock, title: 'Agenda inteligente', text: 'Identifique horarios livres e oportunidades para encaixes.' },
   { id: 'campanhas', icon: Megaphone, title: 'Campanhas', text: 'Crie uma campanha de WhatsApp para clientes inativos.' },
   { id: 'estoque', icon: PackageSearch, title: 'Estoque', text: 'Liste itens em baixa e sugira reposicao prioritaria.' },
-  { id: 'servicos', icon: Lightbulb, title: 'Servicos', text: 'Sugira combos e upgrades para aumentar o ticket medio.' }
+  { id: 'servicos', icon: Sparkles, title: 'Servicos', text: 'Sugira combos e upgrades para aumentar o ticket medio.' }
 ];
+
+const initialMessage = {
+  role: 'assistant',
+  text: 'Ola! Sou o assistente IA do Orquestra Auto Detail. Posso ajudar com agenda, clientes, veiculos, financeiro, estoque, campanhas e servicos.'
+};
 
 const AiAssistant = ({ compact = false }) => {
   const { agendamentos, clientes, estoque, financeiro, servicos } = useData();
   const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  const isPlatformAdmin = currentUser?.role === 'dev';
   const plan = PLANS[currentUser?.planId] || PLANS.medium;
-  const aiCredits = plan.limits.aiCredits || 0;
-  const [usage, setUsage] = useState({ limit: aiCredits, remaining: aiCredits, used: 0 });
+  const aiCredits = isPlatformAdmin ? null : plan.limits.aiCredits || 0;
+  const [usage, setUsage] = useState({ limit: aiCredits || 0, remaining: aiCredits || 0, used: 0 });
   const [question, setQuestion] = useState('');
-  const [selectedPrompt, setSelectedPrompt] = useState(prompts[0]);
-  const [answer, setAnswer] = useState('');
-  const [error, setError] = useState('');
+  const [messages, setMessages] = useState([initialMessage]);
   const [loading, setLoading] = useState(false);
 
   const snapshot = useMemo(() => {
@@ -47,30 +51,37 @@ const AiAssistant = ({ compact = false }) => {
 
   useEffect(() => {
     let alive = true;
+
+    if (isPlatformAdmin) {
+      setUsage({ limit: null, remaining: null, used: 0 });
+      return () => {
+        alive = false;
+      };
+    }
+
     getTenantAiUsage(currentUser?.tenantId, currentUser?.planId)
       .then((data) => {
         if (alive) setUsage(data);
       })
       .catch(() => undefined);
+
     return () => {
       alive = false;
     };
-  }, [currentUser?.tenantId, currentUser?.planId]);
+  }, [currentUser?.tenantId, currentUser?.planId, isPlatformAdmin]);
 
-  const previewAnswer = aiCredits <= 0
-    ? 'Seu plano atual nao inclui creditos de IA. Faca upgrade para liberar o assistente.'
-    : usage.remaining <= 0
-      ? 'Os creditos de IA deste mes acabaram. Aguarde a renovacao ou faca upgrade de plano.'
-    : 'Pronto para gerar analises com IA usando os dados resumidos do seu sistema.';
+  const creditsBlocked = !isPlatformAdmin && (aiCredits <= 0 || usage.remaining <= 0);
+  const creditText = isPlatformAdmin
+    ? 'Admin Orquestra.cs: uso liberado'
+    : `Creditos IA: ${usage.used}/${usage.limit} usados - ${usage.remaining} restantes`;
 
-  const handleGenerate = async () => {
-    const prompt = (question || selectedPrompt.text).trim();
+  const askAssistant = async (text) => {
+    const prompt = text.trim();
+    if (!prompt || loading || creditsBlocked) return;
 
-    if (!prompt || aiCredits <= 0 || usage.remaining <= 0) return;
-
+    setQuestion('');
     setLoading(true);
-    setError('');
-    setAnswer('');
+    setMessages((items) => [...items, { role: 'user', text: prompt }]);
 
     try {
       const token = await auth?.currentUser?.getIdToken();
@@ -85,7 +96,7 @@ const AiAssistant = ({ compact = false }) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          planLabel: plan.label,
+          planLabel: isPlatformAdmin ? 'Admin Orquestra.cs' : plan.label,
           question: prompt,
           snapshot
         })
@@ -96,100 +107,91 @@ const AiAssistant = ({ compact = false }) => {
         throw new Error(data?.error || 'Nao foi possivel gerar a analise.');
       }
 
-      const updatedUsage = await registerTenantAiUsage(currentUser?.tenantId, currentUser?.planId);
-      setUsage(updatedUsage);
-      setAnswer(data.answer);
+      if (!isPlatformAdmin) {
+        const updatedUsage = await registerTenantAiUsage(currentUser?.tenantId, currentUser?.planId);
+        setUsage(updatedUsage);
+      }
+
+      setMessages((items) => [...items, { role: 'assistant', text: data.answer }]);
     } catch (err) {
-      setError(err.message || 'Falha ao gerar a analise.');
+      setMessages((items) => [
+        ...items,
+        { role: 'assistant', text: err.message || 'Nao foi possivel consultar a IA agora.' }
+      ]);
     } finally {
       setLoading(false);
     }
   };
 
+  const submit = (event) => {
+    event.preventDefault();
+    askAssistant(question);
+  };
+
   return (
-    <div style={{ animation: 'fadeIn 0.5s ease' }}>
-      <div className="page-header" style={compact ? { marginBottom: 18 } : undefined}>
-        <div>
-          <h1 className="page-title" style={compact ? { fontSize: 22 } : undefined}>Assistente IA</h1>
-          <p style={{ color: '#aaa', marginTop: 4 }}>Analises, campanhas e decisoes comerciais.</p>
+    <div className={compact ? 'ai-chat-shell compact' : 'ai-chat-shell'}>
+      <header className="ai-chat-header">
+        <div className="ai-chat-title">
+          <span className="ai-chat-icon"><Bot size={22} /></span>
+          <div>
+            <strong>Assistente IA</strong>
+            <span>Orquestra Auto Detail</span>
+          </div>
         </div>
+        <div className="ai-chat-credit">{creditText}</div>
+      </header>
+
+      <section className="ai-chat-metrics">
+        <div><strong>{snapshot.clientes}</strong><span>Clientes</span></div>
+        <div><strong>{snapshot.agendamentos}</strong><span>Agenda</span></div>
+        <div><strong>{snapshot.estoqueBaixo}</strong><span>Estoque baixo</span></div>
+        <div><strong>{isPlatformAdmin ? 'Admin' : usage.remaining}</strong><span>Creditos</span></div>
+      </section>
+
+      {!isPlatformAdmin && aiCredits <= 0 ? (
+        <div className="ai-chat-warning">Seu plano atual nao inclui creditos de IA. Faca upgrade para liberar o assistente.</div>
+      ) : null}
+
+      {!isPlatformAdmin && aiCredits > 0 && usage.remaining <= 0 ? (
+        <div className="ai-chat-warning">Os creditos de IA deste mes acabaram. Aguarde a renovacao ou solicite ajuste no plano.</div>
+      ) : null}
+
+      <div className="ai-chat-prompts">
+        {prompts.map((prompt) => {
+          const Icon = prompt.icon;
+          return (
+            <button key={prompt.id} disabled={loading || creditsBlocked} onClick={() => askAssistant(prompt.text)} type="button">
+              <Icon size={15} />
+              {prompt.title}
+            </button>
+          );
+        })}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : 'minmax(0, 1fr) 320px', gap: 22 }}>
-        <section className={compact ? '' : 'card'}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-            <Bot size={26} color="var(--primary-color)" />
-            <div>
-              <h2 style={{ margin: 0, fontSize: compact ? 18 : 22 }}>Central inteligente</h2>
-              <p style={{ color: '#888', margin: '4px 0 0', fontSize: 13 }}>Escolha uma analise ou escreva sua pergunta.</p>
-            </div>
+      <div className="ai-chat-messages">
+        {messages.map((message, index) => (
+          <div className={`ai-chat-bubble ${message.role}`} key={`${message.role}-${index}`}>
+            {message.text}
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr 1fr' : 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 18 }}>
-            {prompts.map((prompt) => {
-              const Icon = prompt.icon;
-              const active = selectedPrompt.id === prompt.id;
-              return (
-                <button
-                  key={prompt.id}
-                  onClick={() => setSelectedPrompt(prompt)}
-                  style={{
-                    background: active ? 'rgba(var(--primary-rgb), 0.18)' : 'rgba(255,255,255,0.03)',
-                    border: active ? '1px solid var(--primary-color)' : '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: 12,
-                    color: 'white',
-                    cursor: 'pointer',
-                    padding: 14,
-                    textAlign: 'left'
-                  }}
-                >
-                  <Icon size={18} color="var(--primary-color)" />
-                  <strong style={{ display: 'block', marginTop: 8 }}>{prompt.title}</strong>
-                  {!compact ? <span style={{ display: 'block', color: '#999', fontSize: 12, marginTop: 4 }}>{prompt.text}</span> : null}
-                </button>
-              );
-            })}
+        ))}
+        {loading ? (
+          <div className="ai-chat-bubble assistant loading">
+            <Loader2 size={16} />
+            Analisando dados...
           </div>
-
-          <textarea
-            value={question || selectedPrompt.text}
-            onChange={(event) => setQuestion(event.target.value)}
-            rows={5}
-            style={{ width: '100%', borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', color: 'white', padding: 14, resize: 'vertical' }}
-          />
-
-          <div style={{ marginTop: 10, color: '#aaa', fontSize: 13 }}>
-            Creditos IA: {usage.used}/{usage.limit} usados - {usage.remaining} restantes
-          </div>
-
-          <button
-            className="action-btn"
-            disabled={aiCredits <= 0 || usage.remaining <= 0 || loading}
-            onClick={handleGenerate}
-            style={{ marginTop: 14, opacity: aiCredits <= 0 || usage.remaining <= 0 || loading ? 0.55 : 1 }}
-          >
-            <Send size={18} /> {loading ? 'Gerando...' : 'Gerar analise'}
-          </button>
-
-          <div style={{ marginTop: 18, borderRadius: 12, background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.06)', padding: 16, color: '#ddd', lineHeight: 1.6 }}>
-            {error || answer || previewAnswer}
-          </div>
-        </section>
-
-        {!compact ? <aside className="card">
-          <h3 style={{ marginTop: 0 }}>Creditos IA</h3>
-          <strong style={{ fontSize: 34 }}>{usage.remaining}</strong>
-          <p style={{ color: '#aaa' }}>{usage.used}/{usage.limit} usados no mes - plano {plan.label}</p>
-          <div style={{ display: 'grid', gap: 10, marginTop: 18, color: '#ccc', fontSize: 14 }}>
-            <span>Clientes: {snapshot.clientes}</span>
-            <span>Agendamentos: {snapshot.agendamentos}</span>
-            <span>Servicos: {snapshot.servicos}</span>
-            <span>Estoque baixo: {snapshot.estoqueBaixo}</span>
-            <span>Receitas mes: R$ {snapshot.receitasMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-            <span>Despesas mes: R$ {snapshot.despesasMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-          </div>
-        </aside> : null}
+        ) : null}
       </div>
+
+      <form className="ai-chat-form" onSubmit={submit}>
+        <input
+          onChange={(event) => setQuestion(event.target.value)}
+          placeholder="Pergunte sobre agenda, clientes, financeiro ou estoque"
+          value={question}
+        />
+        <button disabled={loading || creditsBlocked || !question.trim()} title="Enviar pergunta" type="submit">
+          <Send size={18} />
+        </button>
+      </form>
     </div>
   );
 };
