@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
-const CACHE_VERSION = '2026-07-07-firebase-env-clean';
+const CACHE_VERSION = '2026-07-10-plans-ai-widget';
 
 async function clearLocalPwaCacheBeforeRender() {
   if (!('serviceWorker' in navigator)) return;
