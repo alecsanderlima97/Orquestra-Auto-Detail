@@ -335,7 +335,7 @@ export async function listPlatformTenants() {
     const aiUsage = await getTenantAiUsage(item.id, tenant.planId);
     const users = usersSnapshot.docs.map((userDoc) => ({ id: userDoc.id, ...userDoc.data() }));
     const lastSeenAt = Math.max(...users.map((user) => timestampToMillis(user.lastSeenAt)), 0);
-    const lastAccessAt = Math.max(timestampToMillis(tenant.lastAccessAt), ...users.map((user) => timestampToMillis(user.lastAccessAt)), 0);
+    const lastAccessAt = Math.max(timestampToMillis(tenant.lastAccessAt), ...users.map((user) => Math.max(timestampToMillis(user.lastAccessAt), timestampToMillis(user.lastSeenAt))), 0);
     const onlineUsers = users.filter((user) => {
       const seenAt = timestampToMillis(user.lastSeenAt);
       return user.online && seenAt && Date.now() - seenAt <= ONLINE_WINDOW_MS;

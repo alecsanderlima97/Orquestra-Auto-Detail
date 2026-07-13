@@ -52,7 +52,7 @@ service cloud.firestore {
       match /users/{userId} {
         allow read: if isPlatformAdmin() || isTenantUser(tenantId);
         allow create: if signedIn() && request.auth.uid == userId;
-        allow update: if isPlatformAdmin() || canManageTenant(tenantId);
+        allow update: if isPlatformAdmin() || canManageTenant(tenantId) || (signedIn() && request.auth.uid == userId && isTenantUser(tenantId));
         allow delete: if false;
       }
 

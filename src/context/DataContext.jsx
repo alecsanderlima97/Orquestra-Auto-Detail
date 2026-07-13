@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { db, firebaseReady } from '../firebase/firebaseConfig';
 
 const DataContext = createContext();
 
@@ -13,18 +15,33 @@ export const useData = () => {
 export const DataProvider = ({ children, currentUser }) => {
   const tenantId = currentUser?.tenantId || currentUser?.email || 'local';
   const scopedKey = (key) => `estetica:${tenantId}:${key}`;
+  const cloudDataRef = useMemo(() => (currentUser?.tenantId && firebaseReady && db ? doc(db, `tenants/${currentUser.tenantId}/appData/main`) : null), [currentUser?.tenantId]);
+  const cloudLoadedRef = useRef(false);
+  const saveTimerRef = useRef(null);
+
+  const storageKeys = (key) => [
+    scopedKey(key),
+    currentUser?.email ? `estetica:${currentUser.email}:${key}` : '',
+    `estetica:local:${key}`,
+    key,
+    `alis${'son'}_${key}`,
+    key === 'servicos' ? `alis${'son'}_servicos_final` : ''
+  ].filter(Boolean);
+
   // Funções Auxiliares de Persistência
   const getInitialData = (key, defaultValue) => {
     try {
-      const saved = localStorage.getItem(scopedKey(key));
-      if (!saved || saved === "null" || saved === "undefined") return defaultValue;
-      
-      try {
-        return JSON.parse(saved);
-      } catch (parseError) {
-        // Se falhar o parse, pode ser que o valor seja apenas uma string sem aspas (ex: premium)
-        return saved || defaultValue;
+      for (const storageKey of storageKeys(key)) {
+        const saved = localStorage.getItem(storageKey);
+        if (!saved || saved === "null" || saved === "undefined") continue;
+
+        try {
+          return JSON.parse(saved);
+        } catch (parseError) {
+          return saved || defaultValue;
+        }
       }
+      return defaultValue;
     } catch (e) {
       console.error(`Erro ao carregar ${key}`, e);
       return defaultValue;
@@ -283,6 +300,55 @@ export const DataProvider = ({ children, currentUser }) => {
     }
   }, [servicos]);
 
+  const buildCloudData = () => ({
+    agendamentos,
+    clientes,
+    estoque,
+    financeiro,
+    privacidade,
+    servicos,
+    theme,
+    userProfile
+  });
+
+  useEffect(() => {
+    cloudLoadedRef.current = false;
+    if (!cloudDataRef) {
+      cloudLoadedRef.current = true;
+      return undefined;
+    }
+
+    let alive = true;
+    getDoc(cloudDataRef)
+      .then((snapshot) => {
+        if (!alive) return;
+
+        if (snapshot.exists()) {
+          const cloud = snapshot.data();
+          if (Array.isArray(cloud.servicos)) setServicos(cloud.servicos);
+          if (Array.isArray(cloud.clientes)) setClientes(cloud.clientes);
+          if (Array.isArray(cloud.agendamentos)) setAgendamentos(cloud.agendamentos);
+          if (Array.isArray(cloud.estoque)) setEstoque(cloud.estoque);
+          if (Array.isArray(cloud.financeiro)) setFinanceiro(cloud.financeiro);
+          if (typeof cloud.privacidade === 'boolean') setPrivacidade(cloud.privacidade);
+          if (cloud.theme) setTheme(cloud.theme);
+          if (cloud.userProfile) setUserProfile((prev) => ({ ...prev, ...cloud.userProfile }));
+        } else {
+          setDoc(cloudDataRef, { ...buildCloudData(), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true }).catch(() => undefined);
+        }
+
+        cloudLoadedRef.current = true;
+      })
+      .catch(() => {
+        cloudLoadedRef.current = true;
+      });
+
+    return () => {
+      alive = false;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [cloudDataRef]);
+
   // Efeito para salvar no localStorage
   useEffect(() => {
     localStorage.setItem(scopedKey('servicos'), JSON.stringify(servicos));
@@ -292,7 +358,13 @@ export const DataProvider = ({ children, currentUser }) => {
     localStorage.setItem(scopedKey('financeiro'), JSON.stringify(financeiro));
     localStorage.setItem(scopedKey('privacidade'), JSON.stringify(privacidade));
     localStorage.setItem(scopedKey('user'), JSON.stringify(userProfile));
-  }, [servicos, clientes, agendamentos, estoque, financeiro, privacidade, userProfile]);
+
+    if (!cloudDataRef || !cloudLoadedRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      setDoc(cloudDataRef, { ...buildCloudData(), updatedAt: serverTimestamp() }, { merge: true }).catch(() => undefined);
+    }, 700);
+  }, [servicos, clientes, agendamentos, estoque, financeiro, privacidade, userProfile, cloudDataRef]);
 
   const addCliente = (cliente) => {
     setClientes(prev => [...prev, { ...cliente, id: Date.now() }]);
