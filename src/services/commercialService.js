@@ -56,6 +56,15 @@ export function daysPastDue(nextBillingDate, now = new Date()) {
   return Math.floor((now.getTime() - due.getTime()) / 86400000);
 }
 
+export function daysUntilDue(nextBillingDate, now = new Date()) {
+  if (!nextBillingDate) return null;
+  const due = new Date(`${nextBillingDate}T00:00:00`);
+  if (Number.isNaN(due.getTime())) return null;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  return Math.ceil((dueDay.getTime() - today.getTime()) / 86400000);
+}
+
 function timestampToMillis(value) {
   if (!value) return 0;
   if (typeof value.toMillis === "function") return value.toMillis();
@@ -97,16 +106,18 @@ export function getTenantBillingState(tenant, now = new Date()) {
 export function getSubscriptionAccess(user) {
   const status = user?.subscriptionStatus || "trial";
   const pastDueDays = daysPastDue(user?.nextBillingDate);
+  const dueInDays = daysUntilDue(user?.nextBillingDate);
   const autoBlocked = ["ativo", "vencido"].includes(status) && pastDueDays >= 5;
   const blocked = status === "bloqueado" || status === "cancelado" || autoBlocked;
 
   return {
     blocked,
+    dueInDays,
     pastDueDays,
     plan: PLANS[user?.planId] || PLANS.medium,
     reason: autoBlocked ? "vencido_5_dias" : status,
     status: autoBlocked ? "bloqueado" : pastDueDays > 0 && status === "ativo" ? "vencido" : status,
-    warning: pastDueDays > 0 && !autoBlocked
+    warning: (dueInDays !== null && dueInDays <= 3) || (pastDueDays > 0 && !autoBlocked)
   };
 }
 

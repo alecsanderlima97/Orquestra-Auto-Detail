@@ -864,6 +864,60 @@ body {
   box-shadow: 0 16px 34px rgba(0,0,0,0.38), 0 0 0 10px rgba(var(--primary-rgb), 0.16);
 }
 
+.billing-reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  border: 1px solid #facc15;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #78350f;
+  padding: 14px 16px;
+  box-shadow: 0 12px 28px rgba(120, 53, 15, 0.12);
+}
+
+.billing-reminder strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #713f12;
+  font-size: 14px;
+}
+
+.billing-reminder p {
+  margin: 5px 0 0;
+  color: #92400e;
+  font-size: 13px;
+}
+
+.billing-reminder a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border-radius: 8px;
+  background: #182414;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .billing-reminder {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .billing-reminder a {
+    width: 100%;
+  }
+}
+
 .ai-panel-overlay {
   position: fixed;
   inset: 0;
