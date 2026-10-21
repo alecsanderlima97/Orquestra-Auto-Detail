@@ -625,6 +625,42 @@ exports.receivePortalCommand = functions
         }
     });
 
+exports.syncPortalSnapshotScheduled = functions
+    .runWith({ secrets: ['ORQUESTRA_PORTAL_CONNECTOR_URL', 'ORQUESTRA_CONNECTOR_SHARED_SECRET'] })
+    .pubsub
+    .schedule('every 15 minutes')
+    .timeZone('America/Sao_Paulo')
+    .onRun(async () => {
+        const endpoint = String(process.env.ORQUESTRA_PORTAL_CONNECTOR_URL || '').trim();
+        const sharedSecret = String(process.env.ORQUESTRA_CONNECTOR_SHARED_SECRET || '').trim();
+        if (!endpoint || !sharedSecret || !isConnectorUrlAllowed(endpoint)) throw new Error('Portal connector not configured.');
+        const snapshot = await buildAutoDetailPortalSnapshot();
+        try {
+            const response = await axios.post(endpoint, snapshot.serializedPayload, {
+                headers: {
+                    Authorization: `Bearer ${sharedSecret}`,
+                    'Content-Type': 'application/json',
+                    'X-Orquestra-Contract-Version': CONTRACT_VERSION,
+                    'X-Orquestra-Source-System': SOURCE_SYSTEM
+                },
+                maxContentLength: 5 * 1024 * 1024,
+                timeout: 30000,
+                validateStatus: () => true
+            });
+            if (response.status < 200 || response.status >= 300) {
+                const message = `Portal recusou a sincronização (HTTP ${response.status}).`;
+                await persistPortalSync(snapshot.clients, 'error', message);
+                throw new Error(message);
+            }
+            await persistPortalSync(snapshot.clients, 'success');
+        } catch (error) {
+            await persistPortalSync(snapshot.clients, 'error', 'Falha de comunicação com o Portal Orquestra.cs.').catch(() => undefined);
+            console.error('[Portal] Sincronização agendada indisponível.', error.code || error.message || 'unknown');
+            throw error;
+        }
+        return null;
+    });
+
 // Carteira de créditos da IA -------------------------------------------------
 async function requireTenantMembership(context, tenantId) {
     requireAuthenticated(context);
