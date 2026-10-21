@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bot, CalendarClock, Loader2, Megaphone, PackageSearch, Send, Sparkles, TrendingUp } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { auth } from '../firebase/firebaseConfig';
-import { PLANS, getTenantAiUsage, registerTenantAiUsage } from '../services/commercialService';
+import { PLANS, askAiAssistantSecure, getTenantAiCredits } from '../services/commercialService';
 
 const prompts = [
   { id: 'financeiro', icon: TrendingUp, title: 'Resumo financeiro', text: 'Analise entradas, saidas e saldo do mes e sugira melhorias.' },
@@ -23,7 +22,7 @@ const AiAssistant = ({ compact = false }) => {
   const isPlatformAdmin = currentUser?.role === 'dev';
   const plan = PLANS[currentUser?.planId] || PLANS.medium;
   const aiCredits = isPlatformAdmin ? null : plan.limits.aiCredits || 0;
-  const [usage, setUsage] = useState({ limit: aiCredits || 0, remaining: aiCredits || 0, used: 0 });
+  const [usage, setUsage] = useState({ balance: aiCredits || 0, bonus: 0, included: aiCredits || 0, used: 0 });
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState([initialMessage]);
   const [loading, setLoading] = useState(false);
@@ -53,13 +52,13 @@ const AiAssistant = ({ compact = false }) => {
     let alive = true;
 
     if (isPlatformAdmin) {
-      setUsage({ limit: null, remaining: null, used: 0 });
+      setUsage({ balance: null, bonus: null, included: null, used: 0 });
       return () => {
         alive = false;
       };
     }
 
-    getTenantAiUsage(currentUser?.tenantId, currentUser?.planId)
+    getTenantAiCredits(currentUser?.tenantId)
       .then((data) => {
         if (alive) setUsage(data);
       })
@@ -70,10 +69,10 @@ const AiAssistant = ({ compact = false }) => {
     };
   }, [currentUser?.tenantId, currentUser?.planId, isPlatformAdmin]);
 
-  const creditsBlocked = !isPlatformAdmin && (aiCredits <= 0 || usage.remaining <= 0);
+  const creditsBlocked = !isPlatformAdmin && usage.balance <= 0;
   const creditText = isPlatformAdmin
     ? 'Admin Orquestra.cs: uso liberado'
-    : `Creditos IA: ${usage.used}/${usage.limit} usados - ${usage.remaining} restantes`;
+    : `Créditos IA: ${usage.balance} disponíveis · ${usage.used} usados · ${usage.bonus} extras`;
 
   const askAssistant = async (text) => {
     const prompt = text.trim();
@@ -84,33 +83,12 @@ const AiAssistant = ({ compact = false }) => {
     setMessages((items) => [...items, { role: 'user', text: prompt }]);
 
     try {
-      const token = await auth?.currentUser?.getIdToken();
-      if (!token) {
-        throw new Error('Entre novamente para usar o assistente.');
-      }
-
-      const response = await fetch('/api/ai-assistant', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          planLabel: isPlatformAdmin ? 'Admin Orquestra.cs' : plan.label,
-          question: prompt,
-          snapshot
-        })
+      const data = await askAiAssistantSecure({
+        tenantId: currentUser?.tenantId,
+        question: prompt,
+        snapshot
       });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || 'Nao foi possivel gerar a analise.');
-      }
-
-      if (!isPlatformAdmin) {
-        const updatedUsage = await registerTenantAiUsage(currentUser?.tenantId, currentUser?.planId);
-        setUsage(updatedUsage);
-      }
+      if (!isPlatformAdmin && data.wallet) setUsage(data.wallet);
 
       setMessages((items) => [...items, { role: 'assistant', text: data.answer }]);
     } catch (err) {
@@ -145,15 +123,15 @@ const AiAssistant = ({ compact = false }) => {
         <div><strong>{snapshot.clientes}</strong><span>Clientes</span></div>
         <div><strong>{snapshot.agendamentos}</strong><span>Agenda</span></div>
         <div><strong>{snapshot.estoqueBaixo}</strong><span>Estoque baixo</span></div>
-        <div><strong>{isPlatformAdmin ? 'Admin' : usage.remaining}</strong><span>Creditos</span></div>
+        <div><strong>{isPlatformAdmin ? 'Admin' : usage.balance}</strong><span>Créditos</span></div>
       </section>
 
-      {!isPlatformAdmin && aiCredits <= 0 ? (
-        <div className="ai-chat-warning">Seu plano atual nao inclui creditos de IA. Faca upgrade para liberar o assistente.</div>
+      {!isPlatformAdmin && aiCredits <= 0 && usage.balance <= 0 ? (
+        <div className="ai-chat-warning">Seu plano atual não inclui créditos mensais de IA. Faça upgrade ou compre créditos extras na tela de Planos.</div>
       ) : null}
 
-      {!isPlatformAdmin && aiCredits > 0 && usage.remaining <= 0 ? (
-        <div className="ai-chat-warning">Os creditos de IA deste mes acabaram. Aguarde a renovacao ou solicite ajuste no plano.</div>
+      {!isPlatformAdmin && aiCredits > 0 && usage.balance <= 0 ? (
+        <div className="ai-chat-warning">Os créditos de IA acabaram. Aguarde a renovação mensal ou compre créditos extras na tela de Planos.</div>
       ) : null}
 
       <div className="ai-chat-prompts">

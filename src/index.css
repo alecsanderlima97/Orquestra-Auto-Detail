@@ -864,6 +864,60 @@ body {
   box-shadow: 0 16px 34px rgba(0,0,0,0.38), 0 0 0 10px rgba(var(--primary-rgb), 0.16);
 }
 
+.billing-reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  border: 1px solid #facc15;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #78350f;
+  padding: 14px 16px;
+  box-shadow: 0 12px 28px rgba(120, 53, 15, 0.12);
+}
+
+.billing-reminder strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #713f12;
+  font-size: 14px;
+}
+
+.billing-reminder p {
+  margin: 5px 0 0;
+  color: #92400e;
+  font-size: 13px;
+}
+
+.billing-reminder a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border-radius: 8px;
+  background: #182414;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .billing-reminder {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .billing-reminder a {
+    width: 100%;
+  }
+}
+
 .ai-panel-overlay {
   position: fixed;
   inset: 0;
@@ -1140,14 +1194,34 @@ body {
   right: 24px;
   bottom: 96px;
   z-index: 1300;
-  width: min(385px, calc(100vw - 40px));
+  width: min(430px, calc(100vw - 40px));
   overflow: hidden;
-  border: 1px solid #a5f3fc;
+  border: 1px solid rgba(var(--primary-rgb), 0.45);
   border-radius: 10px;
   background: #fff;
   color: #0f172a;
   box-shadow: 0 24px 60px rgba(0,0,0,0.36);
   animation: slideUp 0.25s ease-out;
+}
+
+.guide-assistant-mini {
+  position: fixed;
+  right: 24px;
+  bottom: 96px;
+  z-index: 1300;
+  min-height: 44px;
+  border: 1px solid rgba(var(--primary-rgb), 0.55);
+  border-radius: 999px;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.28);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .guide-assistant-header {
@@ -1165,6 +1239,12 @@ body {
   background: transparent;
   color: #fff;
   cursor: pointer;
+}
+
+.guide-assistant-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .guide-assistant-title {
@@ -1194,12 +1274,55 @@ body {
   border-radius: 7px;
   display: grid;
   place-items: center;
-  background: #22d3ee;
+  background: var(--primary-color);
   color: #020617;
 }
 
 .guide-assistant-body {
   padding: 16px;
+}
+
+.guide-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.guide-progress div {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary-color);
+  transition: width 0.25s ease;
+}
+
+.guide-checklist {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.guide-checklist button {
+  min-height: 34px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.guide-checklist button.active {
+  border-color: var(--primary-color);
+  color: #0f172a;
+  background: rgba(var(--primary-rgb), 0.16);
 }
 
 .guide-assistant-body h3 {
@@ -1270,7 +1393,8 @@ body {
 }
 
 .guide-next {
-  background: #0e7490;
+  background: var(--primary-color);
+  color: #111827;
 }
 
 .guide-finish {
@@ -1300,6 +1424,11 @@ body {
     right: 12px;
     bottom: 84px;
     width: calc(100vw - 24px);
+  }
+
+  .guide-assistant-mini {
+    right: 12px;
+    bottom: 84px;
   }
 
   .guide-assistant-actions {

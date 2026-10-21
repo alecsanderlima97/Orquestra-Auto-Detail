@@ -1,14 +1,11 @@
 import {
-  Timestamp,
   collection,
   doc,
   getDoc,
   getDocs,
-  increment,
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where
 } from "firebase/firestore";
@@ -20,10 +17,16 @@ import {
   signInWithPopup,
   signOut
 } from "firebase/auth";
-import { auth, db, firebaseReady } from "../firebase/firebaseConfig";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, firebaseReady, functions as firebaseFunctions } from "../firebase/firebaseConfig";
 
 export const ROLES = ["Proprietario", "Financeiro", "Consulta"];
 export const SUBSCRIPTION_STATUSES = ["trial", "ativo", "vencido", "bloqueado", "cancelado"];
+export const AI_CREDIT_PACKAGES = [
+  { id: "ai-100", credits: 100, label: "Essencial" },
+  { id: "ai-300", credits: 300, label: "Mais escolhido" },
+  { id: "ai-1000", credits: 1000, label: "Performance" }
+];
 
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 let presenceTimer = null;
@@ -32,19 +35,22 @@ export const PLANS = {
   starter: {
     label: "Plano Inicial",
     monthlyPrice: "R$ 75",
-    limits: { users: 1, vehicles: 70, appointments: 150, aiCredits: 0 },
+    recommended: false,
+    limits: { users: 1, vehicles: 65, appointments: 80, serviceOrders: 40, aiCredits: 0 },
     features: ["Agenda", "Clientes e veiculos", "Catalogo de servicos"]
   },
   medium: {
     label: "Plano Medio",
     monthlyPrice: "R$ 120",
-    limits: { users: 3, vehicles: 300, appointments: 350, aiCredits: 15 },
+    recommended: true,
+    limits: { users: 3, vehicles: 200, appointments: 180, serviceOrders: 120, aiCredits: 15 },
     features: ["Tudo do Starter", "Financeiro completo", "Estoque", "Convites internos", "Prioridade no suporte", "Assistente IA inicial"]
   },
   premium: {
     label: "Plano Premium",
     monthlyPrice: "R$ 299",
-    limits: { users: 8, vehicles: 500, appointments: 800, aiCredits: 100 },
+    recommended: false,
+    limits: { users: 6, vehicles: 500, appointments: 350, serviceOrders: 300, aiCredits: 100 },
     features: ["Tudo do Medium", "Multiunidade", "Prioridade no suporte", "Assistente IA avancado"]
   }
 };
@@ -56,12 +62,26 @@ export function daysPastDue(nextBillingDate, now = new Date()) {
   return Math.floor((now.getTime() - due.getTime()) / 86400000);
 }
 
+export function daysUntilDue(nextBillingDate, now = new Date()) {
+  if (!nextBillingDate) return null;
+  const due = new Date(`${nextBillingDate}T00:00:00`);
+  if (Number.isNaN(due.getTime())) return null;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  return Math.ceil((dueDay.getTime() - today.getTime()) / 86400000);
+}
+
 function timestampToMillis(value) {
   if (!value) return 0;
   if (typeof value.toMillis === "function") return value.toMillis();
   if (value instanceof Date) return value.getTime();
   const parsed = new Date(value).getTime();
   return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function timestampToIso(value) {
+  const millis = timestampToMillis(value);
+  return millis ? new Date(millis).toISOString() : "";
 }
 
 function addMonths(dateString, months = 1) {
@@ -78,7 +98,7 @@ function currentMonthKey(date = new Date()) {
 export function getTenantBillingState(tenant, now = new Date()) {
   const status = tenant?.subscriptionStatus || "trial";
   const pastDueDays = daysPastDue(tenant?.nextBillingDate, now);
-  const autoBlocked = ["ativo", "vencido"].includes(status) && pastDueDays >= 5;
+  const autoBlocked = ["trial", "ativo", "vencido"].includes(status) && pastDueDays >= 5;
   const blocked = status === "bloqueado" || status === "cancelado" || autoBlocked;
   const effectiveStatus = autoBlocked ? "bloqueado" : pastDueDays > 0 && status === "ativo" ? "vencido" : status;
   const daysUntilBlock = pastDueDays > 0 && pastDueDays < 5 ? 5 - pastDueDays : 0;
@@ -97,16 +117,18 @@ export function getTenantBillingState(tenant, now = new Date()) {
 export function getSubscriptionAccess(user) {
   const status = user?.subscriptionStatus || "trial";
   const pastDueDays = daysPastDue(user?.nextBillingDate);
-  const autoBlocked = ["ativo", "vencido"].includes(status) && pastDueDays >= 5;
+  const dueInDays = daysUntilDue(user?.nextBillingDate);
+  const autoBlocked = ["trial", "ativo", "vencido"].includes(status) && pastDueDays >= 5;
   const blocked = status === "bloqueado" || status === "cancelado" || autoBlocked;
 
   return {
     blocked,
+    dueInDays,
     pastDueDays,
     plan: PLANS[user?.planId] || PLANS.medium,
     reason: autoBlocked ? "vencido_5_dias" : status,
     status: autoBlocked ? "bloqueado" : pastDueDays > 0 && status === "ativo" ? "vencido" : status,
-    warning: pastDueDays > 0 && !autoBlocked
+    warning: (dueInDays !== null && dueInDays <= 3) || (pastDueDays > 0 && !autoBlocked)
   };
 }
 
@@ -116,10 +138,6 @@ export function canWrite(role) {
 
 export function canManageUsers(role) {
   return role === "Proprietario" || role === "Proprietário";
-}
-
-function createCode() {
-  return Math.random().toString(36).slice(2, 6).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
 function tenantPath(tenantId) {
@@ -134,40 +152,22 @@ function normalizeInvite(snapshot) {
   return invite;
 }
 
-export async function createCommercialInvite(planId = "medium", subscriptionStatus = "trial", nextBillingDate = "") {
-  if (!firebaseReady || !db) throw new Error("Configure um novo projeto Firebase no .env antes de gerar convites.");
-  const code = createCode();
-  const invite = {
-    code,
-    inviteType: "commercial",
-    planId,
-    role: "Proprietario",
-    status: "Ativo",
-    subscriptionStatus,
-    billingDay: 15,
-    nextBillingDate,
-    expiresAt: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
-    createdAt: serverTimestamp()
-  };
-  await setDoc(doc(db, "invites", code), invite);
-  return invite;
+async function callSecureFunction(name, payload = {}) {
+  if (!firebaseReady || !firebaseFunctions) throw new Error("Firebase nao configurado.");
+  try {
+    const result = await httpsCallable(firebaseFunctions, name)(payload);
+    return result.data;
+  } catch (error) {
+    throw new Error(error?.message?.replace(/^FirebaseError:\s*/i, "") || "Operacao administrativa indisponivel.");
+  }
+}
+
+export async function createCommercialInvite(payload = {}) {
+  return callSecureFunction("adminCreateCommercialInvite", payload);
 }
 
 export async function createInternalInvite(tenantId, companyName, role = "Consulta") {
-  if (!firebaseReady || !db) throw new Error("Firebase nao configurado.");
-  const code = createCode();
-  const invite = {
-    code,
-    inviteType: "user",
-    tenantId,
-    companyName,
-    role,
-    status: "Ativo",
-    expiresAt: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
-    createdAt: serverTimestamp()
-  };
-  await setDoc(doc(db, "invites", code), invite);
-  return invite;
+  return callSecureFunction("createTenantInvite", { tenantId, companyName, role });
 }
 
 export async function registerWithInvite({ companyName, email, name, password, inviteCode }) {
@@ -177,50 +177,12 @@ export async function registerWithInvite({ companyName, email, name, password, i
   if (!invite) throw new Error("Convite invalido, usado ou expirado.");
 
   const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  const userId = credential.user.uid;
-  const tenantId = invite.tenantId || crypto.randomUUID();
-  const finalCompanyName = invite.companyName || companyName.trim();
-  const membership = {
-    id: userId,
-    email: email.trim(),
-    name: name.trim(),
-    role: invite.role,
-    tenantId,
-    companyName: finalCompanyName,
-    planId: invite.planId || "medium",
-    subscriptionStatus: invite.subscriptionStatus || "trial",
-    nextBillingDate: invite.nextBillingDate || ""
-  };
-
-  if (invite.inviteType === "commercial") {
-    await setDoc(doc(db, tenantPath(tenantId)), {
-      name: finalCompanyName,
-      planId: membership.planId,
-      subscriptionStatus: membership.subscriptionStatus,
-      billingDay: invite.billingDay || 15,
-      startDate: new Date().toISOString().slice(0, 10),
-      nextBillingDate: membership.nextBillingDate,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-  }
-
-  await setDoc(doc(db, `${tenantPath(tenantId)}/users/${userId}`), {
-    email: membership.email,
-    name: membership.name,
-    role: membership.role,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
+  return callSecureFunction("completeInviteRegistration", {
+    code,
+    companyName: companyName.trim(),
+    email: credential.user.email || email.trim(),
+    name: name.trim()
   });
-  await setDoc(doc(db, `userTenants/${userId}/memberships/${tenantId}`), {
-    companyName: finalCompanyName,
-    role: membership.role,
-    planId: membership.planId,
-    subscriptionStatus: membership.subscriptionStatus,
-    createdAt: serverTimestamp()
-  });
-  await updateDoc(doc(db, "invites", code), { status: "Usado", usedAt: serverTimestamp(), usedBy: userId });
-  return membership;
 }
 
 export async function loginWithFirebase(email, password) {
@@ -250,14 +212,24 @@ export async function loadUserMembership(userId) {
   const membership = first.data();
   const tenantSnapshot = await getDoc(doc(db, tenantPath(tenantId)));
   const tenant = tenantSnapshot.exists() ? tenantSnapshot.data() : {};
+  const billing = getTenantBillingState(tenant);
+
+  if (billing.autoBlocked && tenant.subscriptionStatus !== "bloqueado") {
+    updateDoc(doc(db, tenantPath(tenantId)), {
+      subscriptionStatus: "bloqueado",
+      updatedAt: serverTimestamp()
+    }).catch(() => undefined);
+  }
+
   return {
     id: userId,
     tenantId,
     companyName: tenant.name || membership.companyName || "Empresa",
     role: membership.role || "Consulta",
     planId: tenant.planId || membership.planId || "medium",
-    subscriptionStatus: tenant.subscriptionStatus || membership.subscriptionStatus || "trial",
-    nextBillingDate: tenant.nextBillingDate || ""
+    subscriptionStatus: billing.effectiveStatus || tenant.subscriptionStatus || membership.subscriptionStatus || "trial",
+    nextBillingDate: tenant.nextBillingDate || "",
+    externalCustomerId: tenant.externalId || tenant.externalCustomerId || `orquestra_auto_detail_${tenantId}`
   };
 }
 
@@ -287,7 +259,10 @@ function startPresence(membership) {
 }
 
 export function listenAuth(callback) {
-  if (!firebaseReady || !auth) return () => undefined;
+  if (!firebaseReady || !auth) {
+    callback(null);
+    return () => undefined;
+  }
   return onAuthStateChanged(auth, async (firebaseUser) => {
     if (!firebaseUser) {
       if (presenceTimer) clearInterval(presenceTimer);
@@ -333,9 +308,19 @@ export async function listPlatformTenants() {
     const tenant = { id: item.id, ...item.data() };
     const usersSnapshot = await getDocs(collection(db, `${tenantPath(item.id)}/users`)).catch(() => ({ docs: [] }));
     const aiUsage = await getTenantAiUsage(item.id, tenant.planId);
+    const appSnapshot = await getTenantAppSnapshot(item.id);
+    const paymentsSnapshot = await getDocs(collection(db, `${tenantPath(item.id)}/payments`)).catch(() => ({ docs: [] }));
+    const aiCredits = await getTenantAiCredits(item.id).catch(() => ({ balance: 0, bonus: 0, included: PLANS[tenant.planId]?.limits?.aiCredits || 0, used: 0 }));
+    const adjustmentsSnapshot = await getDocs(collection(db, `${tenantPath(item.id)}/aiCreditAdjustments`)).catch(() => ({ docs: [] }));
     const users = usersSnapshot.docs.map((userDoc) => ({ id: userDoc.id, ...userDoc.data() }));
+    const payments = paymentsSnapshot.docs
+      .map((paymentDoc) => ({ id: paymentDoc.id, ...paymentDoc.data() }))
+      .sort((a, b) => timestampToMillis(b.paidAt || b.createdAt) - timestampToMillis(a.paidAt || a.createdAt));
+    const aiCreditAdjustments = adjustmentsSnapshot.docs
+      .map((adjustmentDoc) => ({ id: adjustmentDoc.id, ...adjustmentDoc.data() }))
+      .sort((a, b) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt));
     const lastSeenAt = Math.max(...users.map((user) => timestampToMillis(user.lastSeenAt)), 0);
-    const lastAccessAt = Math.max(timestampToMillis(tenant.lastAccessAt), ...users.map((user) => timestampToMillis(user.lastAccessAt)), 0);
+    const lastAccessAt = Math.max(timestampToMillis(tenant.lastAccessAt), ...users.map((user) => Math.max(timestampToMillis(user.lastAccessAt), timestampToMillis(user.lastSeenAt))), 0);
     const onlineUsers = users.filter((user) => {
       const seenAt = timestampToMillis(user.lastSeenAt);
       return user.online && seenAt && Date.now() - seenAt <= ONLINE_WINDOW_MS;
@@ -349,68 +334,108 @@ export async function listPlatformTenants() {
       online: onlineUsers.length > 0,
       onlineUsers: onlineUsers.length,
       aiUsage,
+      appSnapshot,
+      aiCredits,
+      aiCreditAdjustments,
+      payments,
       users
     };
   }));
 
-  return tenants.filter((tenant) => !tenant.archived);
+  return tenants;
 }
 
 export async function updateTenantSubscription(tenantId, updates) {
-  await updateDoc(doc(db, tenantPath(tenantId)), { ...updates, updatedAt: serverTimestamp() });
+  return callSecureFunction("adminUpdateTenant", { tenantId, updates });
 }
 
-export async function getTenantAiUsage(tenantId, planId = "medium") {
+export async function getTenantAppSnapshot(tenantId) {
   if (!firebaseReady || !db || !tenantId) {
-    return { limit: 0, monthKey: currentMonthKey(), remaining: 0, used: 0 };
+    return { counts: {}, auditLogs: [], updatedAt: "" };
   }
 
-  const monthKey = currentMonthKey();
-  const limit = PLANS[planId]?.limits?.aiCredits || 0;
-  const snapshot = await getDoc(doc(db, `${tenantPath(tenantId)}/aiUsage/${monthKey}`)).catch(() => null);
-  const used = snapshot?.exists?.() ? Number(snapshot.data().used || 0) : 0;
+  const snapshot = await getDoc(doc(db, `${tenantPath(tenantId)}/appData/main`)).catch(() => null);
+  if (!snapshot?.exists?.()) {
+    return { counts: {}, auditLogs: [], updatedAt: "" };
+  }
+
+  const data = snapshot.data();
+  const countCollection = (key) => {
+    const items = Array.isArray(data[key]) ? data[key] : [];
+    const deleted = items.filter((item) => item?.deletedAt).length;
+    return { active: items.length - deleted, deleted, total: items.length };
+  };
 
   return {
-    limit,
-    monthKey,
-    remaining: Math.max(limit - used, 0),
-    used
+    counts: {
+      clientes: countCollection("clientes"),
+      agendamentos: countCollection("agendamentos"),
+      servicos: countCollection("servicos"),
+      estoque: countCollection("estoque"),
+      financeiro: countCollection("financeiro")
+    },
+    auditLogs: Array.isArray(data.auditLogs) ? data.auditLogs.slice(0, 12) : [],
+    updatedAt: timestampToIso(data.updatedAt)
   };
 }
 
-export async function registerTenantAiUsage(tenantId, planId = "medium") {
-  if (!firebaseReady || !db || !tenantId) {
-    return { limit: 0, monthKey: currentMonthKey(), remaining: 0, used: 0 };
-  }
-
-  const monthKey = currentMonthKey();
-  const limit = PLANS[planId]?.limits?.aiCredits || 0;
-
-  await setDoc(doc(db, `${tenantPath(tenantId)}/aiUsage/${monthKey}`), {
-    limit,
-    monthKey,
-    planId,
-    updatedAt: serverTimestamp(),
-    used: increment(1)
-  }, { merge: true });
-
-  return getTenantAiUsage(tenantId, planId);
+export async function getTenantAiCredits(tenantId) {
+  if (!tenantId) return { balance: 0, bonus: 0, included: 0, renewalMonth: currentMonthKey(), status: "empty", used: 0 };
+  return callSecureFunction("getTenantAiCredits", { tenantId });
 }
 
-export async function markTenantPaid(tenant) {
-  const nextBillingDate = addMonths(tenant.nextBillingDate || tenant.startDate, 1);
-  await updateTenantSubscription(tenant.id, {
-    subscriptionStatus: "ativo",
-    billingDay: Number(tenant.billingDay || 15),
-    nextBillingDate
+export async function getTenantAiUsage(tenantId, planId = "medium") {
+  const wallet = await getTenantAiCredits(tenantId);
+  const limit = Number(wallet.included ?? PLANS[planId]?.limits?.aiCredits ?? 0);
+  return { ...wallet, limit, monthKey: wallet.renewalMonth || currentMonthKey(), remaining: wallet.balance ?? 0, used: wallet.used ?? 0 };
+}
+
+export async function askAiAssistantSecure(payload) {
+  return callSecureFunction("askAiAssistant", payload);
+}
+
+export async function addTenantAiCredits(tenantId, credits, reason) {
+  return callSecureFunction("adminAddAiCredits", { tenantId, credits, reason });
+}
+
+export async function syncPortalSnapshot() {
+  return callSecureFunction("adminSyncPortal");
+}
+
+export function buildAiCreditsPurchaseUrl({ packageId, credits, externalCustomerId, returnUrl }) {
+  const validPackage = AI_CREDIT_PACKAGES.find((item) => item.id === packageId && item.credits === Number(credits));
+  if (!validPackage) throw new Error("Pacote de créditos inválido.");
+  const baseUrl = import.meta.env.VITE_ORQUESTRA_PORTAL_PAYMENTS_URL || "https://portal.orquestracs.com/pagamentos";
+  const url = new URL(baseUrl);
+  url.searchParams.set("sourceSystem", "orquestra_auto_detail");
+  url.searchParams.set("product", "ai_credits");
+  url.searchParams.set("packageId", packageId);
+  url.searchParams.set("credits", String(validPackage.credits));
+  url.searchParams.set("externalCustomerId", String(externalCustomerId || ""));
+  url.searchParams.set("returnUrl", returnUrl || `${window.location.origin}/planos`);
+  return url.toString();
+}
+
+export async function markTenantPaid(tenant, payment = {}) {
+  return callSecureFunction("adminRecordPayment", {
+    tenantId: tenant.id,
+    payment: {
+      amount: Number(payment.amount || tenant.monthlyAmount || 0),
+      method: payment.method || tenant.paymentMethod || "PIX",
+      note: payment.note || "",
+      paidAt: payment.paidAt || new Date().toISOString().slice(0, 10),
+      referenceMonth: payment.referenceMonth || currentMonthKey(),
+      nextBillingDate: payment.nextBillingDate || addMonths(tenant.nextBillingDate || tenant.startDate, 1)
+    }
   });
 }
 
 export async function archiveTenant(tenantId) {
-  await updateTenantSubscription(tenantId, {
-    archived: true,
-    subscriptionStatus: "cancelado"
-  });
+  return callSecureFunction("adminArchiveTenant", { tenantId });
+}
+
+export async function restoreTenant(tenantId) {
+  return callSecureFunction("adminRestoreTenant", { tenantId });
 }
 
 export async function listTenantUsers(tenantId) {
@@ -419,7 +444,7 @@ export async function listTenantUsers(tenantId) {
 }
 
 export async function updateTenantUserRole(tenantId, userId, role) {
-  await updateDoc(doc(db, `${tenantPath(tenantId)}/users/${userId}`), { role, updatedAt: serverTimestamp() });
+  return callSecureFunction("updateTenantUserRole", { tenantId, userId, role });
 }
 
 export async function listTenantInvites(tenantId) {

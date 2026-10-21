@@ -14,6 +14,7 @@ import Settings from './pages/Settings';
 import { WeatherProvider } from './context/WeatherContext';
 import PlatformAdmin from './pages/PlatformAdmin';
 import Plans from './pages/Plans';
+import UserPermissions from './pages/UserPermissions';
 import { listenAuth } from './services/commercialService';
 
 function App() {
@@ -38,6 +39,9 @@ function App() {
       if (userData) {
         setUser(userData);
         localStorage.setItem('currentUser', JSON.stringify(userData));
+      } else {
+        setUser(null);
+        localStorage.removeItem('currentUser');
       }
       setAuthChecked(true);
     });
@@ -80,6 +84,7 @@ function App() {
             <Route path="estoque" element={<Estoque />} />
             <Route path="financeiro" element={<Financeiro />} />
             <Route path="planos" element={<Plans />} />
+            <Route path="usuarios" element={<UserPermissions />} />
             <Route path="configuracoes" element={<Settings />} />
             <Route path="admin-orquestra" element={user?.role === 'dev' ? <PlatformAdmin /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />

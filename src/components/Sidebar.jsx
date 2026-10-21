@@ -8,6 +8,7 @@ import {
   Sparkles, 
   DollarSign, 
   CreditCard,
+  Users,
   Settings, 
   Calculator as CalcIcon,
   ShieldCheck
@@ -71,6 +72,11 @@ const Sidebar = ({ isOpen, onClose, onToggleCalculator }) => {
         <NavLink to="/planos" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")} onClick={handleNavLinkClick}>
           <CreditCard size={20} />
           <span>Planos</span>
+        </NavLink>
+
+        <NavLink to="/usuarios" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")} onClick={handleNavLinkClick}>
+          <Users size={20} />
+          <span>Usuários e Permissões</span>
         </NavLink>
 
         {currentUser?.role === 'dev' ? (

@@ -3,6 +3,31 @@ import { Calendar as CalendarIcon, Plus, MessageCircle, Instagram, CheckCircle, 
 import { useData } from '../context/DataContext';
 import AgendamentoFormModal from '../components/AgendamentoFormModal';
 import ImpressaoOSModal from '../components/ImpressaoOSModal';
+import { getSubscriptionAccess } from '../services/commercialService';
+
+const getMonthKeyFromDateStr = (dateStr) => {
+  if (!dateStr) return '';
+  const [, month, year] = dateStr.split('/');
+  return month && year ? `${year}-${month}` : '';
+};
+
+const countAppointmentsInMonth = (items, dateStr) => {
+  const monthKey = getMonthKeyFromDateStr(dateStr);
+  if (!monthKey) return 0;
+  return items.filter((item) => getMonthKeyFromDateStr(item.dataStr) === monthKey).length;
+};
+
+const getMonthKeyFromIso = (value) => {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 7);
+};
+
+const countServiceOrdersInMonth = (items, date = new Date()) => {
+  const monthKey = date.toISOString().slice(0, 7);
+  return items.filter((item) => getMonthKeyFromIso(item.osGeneratedAt) === monthKey).length;
+};
 
 // Componente de Calendário Premium Customizado
 const CalendarModal = ({ isOpen, onClose, onSelectDate, initialDate }) => {
@@ -103,6 +128,14 @@ const Agendamentos = () => {
   const [agendamentoParaImprimir, setAgendamentoParaImprimir] = useState(null);
   const [filtroData, setFiltroData] = useState(new Date().toLocaleDateString('pt-BR'));
   const [dataVista, setDataVista] = useState(new Date());
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  const access = getSubscriptionAccess(currentUser);
+  const appointmentLimit = access.plan.limits.appointments;
+  const serviceOrderLimit = access.plan.limits.serviceOrders || 0;
+  const currentMonthAppointments = countAppointmentsInMonth(agendamentos, filtroData);
+  const currentMonthServiceOrders = countServiceOrdersInMonth(agendamentos);
+  const reachedAppointmentLimit = currentUser?.role !== 'dev' && appointmentLimit > 0 && currentMonthAppointments >= appointmentLimit;
+  const reachedServiceOrderLimit = currentUser?.role !== 'dev' && serviceOrderLimit > 0 && currentMonthServiceOrders >= serviceOrderLimit;
 
   const formatarValor = (valor) => {
     return `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
@@ -124,6 +157,11 @@ const Agendamentos = () => {
     if (agendamentoParaEditar) {
       updateAgendamento(agendamentoParaEditar.id, dados);
     } else {
+      const monthUsage = countAppointmentsInMonth(agendamentos, dados.dataStr);
+      if (currentUser?.role !== 'dev' && appointmentLimit > 0 && monthUsage >= appointmentLimit) {
+        alert(`Limite do ${access.plan.label} atingido: ${appointmentLimit} agendamentos neste mes. Para continuar agendando, solicite liberacao ou upgrade para o Plano Premium.`);
+        return;
+      }
       addAgendamento(dados);
     }
     setIsModalOpen(false);
@@ -133,6 +171,22 @@ const Agendamentos = () => {
   const setEditando = (agendamento) => {
     setAgendamentoParaEditar(agendamento);
     setIsModalOpen(true);
+  };
+
+  const handleOpenServiceOrder = (agendamento) => {
+    if (agendamento.osGeneratedAt) {
+      setAgendamentoParaImprimir(agendamento);
+      return;
+    }
+
+    if (reachedServiceOrderLimit) {
+      alert(`Limite do ${access.plan.label} atingido: ${serviceOrderLimit} ordens de servico neste mes. Solicite liberacao ou upgrade para continuar gerando OS.`);
+      return;
+    }
+
+    const osGeneratedAt = new Date().toISOString();
+    updateAgendamento(agendamento.id, { osGeneratedAt });
+    setAgendamentoParaImprimir({ ...agendamento, osGeneratedAt });
   };
 
   const getStatusClass = (status) => {
@@ -213,11 +267,25 @@ const Agendamentos = () => {
              <button className="action-btn" style={{ background: 'rgba(255,255,255,0.05)', color: '#888' }} onClick={() => setDataVista(new Date())}>
                 Hoje
              </button>
-            <button className="action-btn" onClick={() => { setAgendamentoParaEditar(null); setIsModalOpen(true); }}>
+            <button className="action-btn" disabled={reachedAppointmentLimit} title={reachedAppointmentLimit ? 'Limite mensal do plano atingido' : 'Novo Agendamento'} onClick={() => { setAgendamentoParaEditar(null); setIsModalOpen(true); }}>
                 <Plus size={18} /> Novo Agendamento
             </button>
         </div>
       </div>
+
+      {reachedAppointmentLimit ? (
+        <div className="card" style={{ marginBottom: 24, borderColor: 'rgba(245,158,11,.35)', background: 'rgba(245,158,11,.1)', color: '#fde68a', display: 'flex', gap: 10, alignItems: 'center' }}>
+          <AlertCircle size={18} />
+          Limite do {access.plan.label} atingido: {currentMonthAppointments}/{appointmentLimit} agendamentos neste mes. Solicite liberacao ou upgrade para continuar agendando.
+        </div>
+      ) : null}
+
+      {reachedServiceOrderLimit ? (
+        <div className="card" style={{ marginBottom: 24, borderColor: 'rgba(245,158,11,.35)', background: 'rgba(245,158,11,.1)', color: '#fde68a', display: 'flex', gap: 10, alignItems: 'center' }}>
+          <AlertCircle size={18} />
+          Limite do {access.plan.label} atingido: {currentMonthServiceOrders}/{serviceOrderLimit} ordens de servico neste mes. Solicite liberacao ou upgrade para continuar gerando OS.
+        </div>
+      ) : null}
 
       {/* KPIs Rápidos do Dia */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
@@ -397,8 +465,9 @@ const Agendamentos = () => {
 
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button 
-                    onClick={() => setAgendamentoParaImprimir(agendamento)} 
-                    title="Imprimir OS" 
+                    onClick={() => handleOpenServiceOrder(agendamento)} 
+                    disabled={reachedServiceOrderLimit && !agendamento.osGeneratedAt}
+                    title={reachedServiceOrderLimit && !agendamento.osGeneratedAt ? 'Limite mensal de OS atingido' : 'Imprimir OS'} 
                     className="action-btn-circle" 
                     style={{ background: 'rgba(37, 211, 102, 0.1)', color: '#25D366' }}
                   >

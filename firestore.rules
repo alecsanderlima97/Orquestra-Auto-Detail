@@ -33,45 +33,79 @@ service cloud.firestore {
     match /invites/{code} {
       allow get: if true;
       allow list: if isPlatformAdmin() || (signedIn() && resource.data.tenantId != null && isTenantUser(resource.data.tenantId));
-      allow create: if isPlatformAdmin()
-        || (request.resource.data.inviteType == "user"
-          && request.resource.data.tenantId is string
-          && canManageTenant(request.resource.data.tenantId));
+      allow create: if false;
       allow update: if isPlatformAdmin()
-        || (signedIn() && resource.data.status == "Ativo" && request.resource.data.status == "Usado")
-        || (resource.data.tenantId is string && canManageTenant(resource.data.tenantId));
+        || (resource.data.tenantId is string
+          && canManageTenant(resource.data.tenantId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "updatedAt"])
+          && request.resource.data.status == "Cancelado");
       allow delete: if false;
     }
 
     match /tenants/{tenantId} {
       allow get, list: if isPlatformAdmin() || isTenantUser(tenantId);
-      allow create: if signedIn();
-      allow update: if isPlatformAdmin() || canManageTenant(tenantId);
+      allow create: if false;
+      allow update: if (isPlatformAdmin()
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["aiCredits"]))
+        || (isTenantUser(tenantId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastAccessAt", "updatedAt"]))
+        || (canManageTenant(tenantId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "updatedAt"]));
       allow delete: if false;
 
       match /users/{userId} {
         allow read: if isPlatformAdmin() || isTenantUser(tenantId);
-        allow create: if signedIn() && request.auth.uid == userId;
-        allow update: if isPlatformAdmin() || canManageTenant(tenantId);
+        allow create: if false;
+        allow update: if isPlatformAdmin()
+          || (signedIn()
+            && request.auth.uid == userId
+            && isTenantUser(tenantId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastSeenAt", "lastAccessAt", "online", "updatedAt"]));
         allow delete: if false;
       }
 
       match /aiUsage/{monthId} {
         allow read: if isPlatformAdmin() || isTenantUser(tenantId);
-        allow create, update: if isPlatformAdmin() || isTenantUser(tenantId);
-        allow delete: if isPlatformAdmin();
+        allow write: if false;
+      }
+
+      match /aiCreditUsage/{usageId} {
+        allow read: if isPlatformAdmin() || isTenantUser(tenantId);
+        allow write: if false;
+      }
+
+      match /aiCreditAdjustments/{adjustmentId} {
+        allow read: if isPlatformAdmin() || canManageTenant(tenantId);
+        allow write: if false;
+      }
+
+      match /payments/{paymentId} {
+        allow read: if isPlatformAdmin() || canManageTenant(tenantId);
+        allow write: if false;
+      }
+
+      match /audit/{auditId} {
+        allow read: if isPlatformAdmin() || canManageTenant(tenantId);
+        allow write: if false;
       }
 
       match /{collectionName}/{documentId} {
-        allow read: if isPlatformAdmin() || isTenantUser(tenantId);
-        allow create, update: if isPlatformAdmin() || canWriteTenant(tenantId);
-        allow delete: if isPlatformAdmin() || canManageTenant(tenantId);
+        allow read: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit"])
+          && (isPlatformAdmin() || isTenantUser(tenantId));
+        allow create, update: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit"])
+          && (isPlatformAdmin() || canWriteTenant(tenantId));
+        allow delete: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit"])
+          && (isPlatformAdmin() || canManageTenant(tenantId));
       }
     }
 
     match /userTenants/{userId}/memberships/{tenantId} {
-      allow read, create, update: if signedIn() && request.auth.uid == userId;
-      allow delete: if false;
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /portalAiCreditEvents/{eventId} {
+      allow read, write: if false;
     }
 
     match /{document=**} {

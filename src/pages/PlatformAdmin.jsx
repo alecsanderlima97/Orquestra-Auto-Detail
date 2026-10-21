@@ -1,289 +1,106 @@
-import React, { useEffect, useState } from "react";
-import { Archive, CheckCircle2, Copy, Eye, RefreshCw, Save, TicketPlus } from "lucide-react";
-import {
-  PLANS,
-  SUBSCRIPTION_STATUSES,
-  archiveTenant,
-  createCommercialInvite,
-  listPlatformTenants,
-  markTenantPaid,
-  updateTenantSubscription
-} from "../services/commercialService";
+import React, { useEffect, useMemo, useState } from "react";
+import { ArchiveRestore, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, Edit3, ExternalLink, Loader2, MapPin, Pause, RefreshCw, RotateCcw, Save, Sparkles, TicketPlus, Trash2, UserRound, Users, X } from "lucide-react";
+import { PLANS, SUBSCRIPTION_STATUSES, addTenantAiCredits, archiveTenant, createCommercialInvite, listPlatformTenants, markTenantPaid, restoreTenant, syncPortalSnapshot, updateTenantSubscription } from "../services/commercialService";
+import "./PlatformAdmin.css";
 
-const adminWrap = {
-  background: "#f6f8fb",
-  color: "#020617",
-  margin: "-40px",
-  minHeight: "calc(100vh - 80px)",
-  padding: 18
-};
+const DEFAULT_COLUMNS = ["client", "plan", "status", "startDate", "dueDate", "situation", "lastAccess", "online", "credits", "actions"];
+const LABELS = { client: "Cliente", plan: "Plano", status: "Status", startDate: "Inscrição", dueDate: "Vencimento", situation: "Situação calculada", lastAccess: "Último acesso", online: "Online", credits: "Créditos IA", actions: "Ação" };
+const emptyCustomer = { name: "", responsibleName: "", accessEmail: "", phone: "", documentType: "CNPJ", documentNumber: "", legalName: "", tradeName: "", postalCode: "", addressStreet: "", addressNumber: "", addressComplement: "", addressDistrict: "", addressCity: "", addressState: "", googleMapsUrl: "", planId: "medium", monthlyAmount: 120, billingDay: 15, toleranceDays: 5, startDate: new Date().toISOString().slice(0, 10), nextBillingDate: "", paymentMethod: "PIX", subscriptionStatus: "trial", internalNotes: "", adminUserLimit: 3, collaboratorLimit: 3, aiCreditLimit: 15, dataVersion: 1 };
+const limits = (id) => ({ users: (PLANS[id] || PLANS.medium).limits.users || 1, credits: (PLANS[id] || PLANS.medium).limits.aiCredits || 0 });
+const dateOnly = (value) => { if (!value) return "Sem registro"; const d = value?.toDate ? value.toDate() : new Date(`${String(value).slice(0, 10)}T12:00:00`); return Number.isNaN(d.getTime()) ? "Sem registro" : d.toLocaleDateString("pt-BR"); };
+const dateTime = (value) => { if (!value) return "Sem registro"; const d = value?.toDate ? value.toDate() : new Date(value); return Number.isNaN(d.getTime()) ? "Sem registro" : d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); };
+const money = (value) => Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const normalize = (tenant = {}) => { const plan = limits(tenant.planId); return { ...emptyCustomer, ...tenant, name: tenant.name || tenant.companyName || "", monthlyAmount: tenant.monthlyAmount ?? Number(String(PLANS[tenant.planId]?.monthlyPrice || "0").replace(/\D/g, "")), adminUserLimit: tenant.adminUserLimit ?? plan.users, collaboratorLimit: tenant.collaboratorLimit ?? plan.users, aiCreditLimit: tenant.aiCreditLimit ?? plan.credits }; };
+const billingSituation = (tenant) => { if (!tenant.nextBillingDate) return { label: "Sem vencimento", tone: "muted" }; if (tenant.billing?.blocked || ["bloqueado", "cancelado"].includes(tenant.subscriptionStatus)) return { label: "Bloqueado", tone: "danger" }; const due = new Date(`${tenant.nextBillingDate}T23:59:59`); const days = Math.ceil((due.getTime() - Date.now()) / 86400000); if (days < 0) return { label: `Vencido há ${Math.abs(days)} dia(s)`, tone: Math.abs(days) >= Number(tenant.toleranceDays ?? 5) ? "danger" : "warning" }; return { label: `Em dia: vence em ${days} dia(s)`, tone: "success" }; };
 
-const panelStyle = {
-  background: "#fff",
-  border: "1px solid #fde68a",
-  borderRadius: 10,
-  boxShadow: "0 1px 3px rgba(15,23,42,0.08)",
-  overflow: "hidden"
-};
-
-const inputStyle = {
-  height: 34,
-  borderRadius: 5,
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  color: "#020617",
-  padding: "0 10px",
-  width: "100%"
-};
-
-const buttonDark = {
-  height: 34,
-  borderRadius: 5,
-  border: "none",
-  background: "#020617",
-  color: "#fff",
-  padding: "0 14px",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 7,
-  fontSize: 12,
-  fontWeight: 800,
-  cursor: "pointer"
-};
-
-const formatDate = (date) => {
-  if (!date) return "Sem registro";
-  return new Date(`${date.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR");
-};
-
-const formatDateTime = (value) => {
-  if (!value) return "Sem registro";
-  return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
-
-const situationLabel = (tenant) => {
-  const billing = tenant.billing || {};
-  if (!tenant.nextBillingDate) return { text: "Sem vencimento", tone: "muted" };
-  if (billing.blocked) return { text: "Bloqueado", tone: "danger" };
-  if (billing.pastDueDays > 0) return { text: `Vencido ha ${billing.pastDueDays} dia(s)`, tone: "warn" };
-  const due = new Date(`${tenant.nextBillingDate}T23:59:59`);
-  const days = Math.max(0, Math.ceil((due.getTime() - Date.now()) / 86400000));
-  return { text: `Em dia: vence em ${days} dia(s)`, tone: "ok" };
-};
-
-const badgeStyle = (tone) => {
-  const map = {
-    ok: { background: "#bbf7d0", color: "#166534" },
-    warn: { background: "#fed7aa", color: "#9a3412" },
-    danger: { background: "#fecaca", color: "#991b1b" },
-    muted: { background: "#eef2f7", color: "#475569" },
-    online: { background: "#bbf7d0", color: "#166534" },
-    offline: { background: "#eef2f7", color: "#475569" }
-  };
-  return {
-    ...(map[tone] || map.muted),
-    borderRadius: 999,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 25,
-    padding: "5px 10px",
-    fontSize: 11,
-    fontWeight: 800,
-    lineHeight: 1.15
-  };
-};
-
-const PlatformAdmin = () => {
-  const [tenants, setTenants] = useState([]);
-  const [expandedId, setExpandedId] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [planId, setPlanId] = useState("medium");
-  const [status, setStatus] = useState("trial");
-  const [nextBillingDate, setNextBillingDate] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
-  const [message, setMessage] = useState("");
-
-  const load = async () => {
-    setLoading(true);
-    setMessage("");
-    try {
-      setTenants(await listPlatformTenants());
-    } catch {
-      setMessage("Nao foi possivel carregar clientes.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+export default function PlatformAdmin() {
+  const [tenants, setTenants] = useState([]), [loading, setLoading] = useState(true), [busyId, setBusyId] = useState(""), [expandedId, setExpandedId] = useState("");
+  const [newOpen, setNewOpen] = useState(false), [inactiveOpen, setInactiveOpen] = useState(false), [editing, setEditing] = useState(null), [paymentTenant, setPaymentTenant] = useState(null), [creditTenant, setCreditTenant] = useState(null);
+  const [inviteCode, setInviteCode] = useState(""), [notice, setNotice] = useState(null), [lastUpdated, setLastUpdated] = useState(null), [dragged, setDragged] = useState(""), [syncing, setSyncing] = useState(false);
+  const [columns, setColumns] = useState(() => { try { const saved = JSON.parse(localStorage.getItem("orquestra-admin-column-order") || "null"); return Array.isArray(saved) && saved.length === DEFAULT_COLUMNS.length ? saved : DEFAULT_COLUMNS; } catch { return DEFAULT_COLUMNS; } });
+  const active = useMemo(() => tenants.filter((x) => !x.archived), [tenants]), inactive = useMemo(() => tenants.filter((x) => x.archived), [tenants]);
+  const load = async (text = "") => { setLoading(true); try { setTenants(await listPlatformTenants()); setLastUpdated(new Date()); if (text) setNotice({ type: "success", text }); } catch (e) { setNotice({ type: "error", text: e.message || "Não foi possível carregar os clientes." }); } finally { setLoading(false); } };
   useEffect(() => {
-    load();
+    let activeRequest = true;
+    listPlatformTenants()
+      .then((items) => { if (activeRequest) { setTenants(items); setLastUpdated(new Date()); } })
+      .catch((error) => { if (activeRequest) setNotice({ type: "error", text: error.message || "Não foi possível carregar os clientes." }); })
+      .finally(() => { if (activeRequest) setLoading(false); });
+    return () => { activeRequest = false; };
   }, []);
-
-  const updateTenantLocal = (tenantId, updates) => {
-    setTenants((items) => items.map((item) => item.id === tenantId ? { ...item, ...updates } : item));
-  };
-
-  const generateInvite = async () => {
+  useEffect(() => { localStorage.setItem("orquestra-admin-column-order", JSON.stringify(columns)); }, [columns]);
+  const run = async (id, action, text) => { setBusyId(id); setNotice(null); try { await action(); await load(text); } catch (e) { setNotice({ type: "error", text: e.message || "Não foi possível concluir a operação." }); } finally { setBusyId(""); } };
+  const drop = (target) => { if (!dragged || dragged === target) return; setColumns((current) => { const next = current.filter((id) => id !== dragged); next.splice(next.indexOf(target), 0, dragged); return next; }); setDragged(""); };
+  const saveCustomer = (form) => run(form.id || "new", async () => { if (form.id) await updateTenantSubscription(form.id, form); else { const result = await createCommercialInvite({ tenant: form }); setInviteCode(result.code); } setEditing(null); setNewOpen(false); }, form.id ? "Cadastro atualizado com sucesso." : "Cliente preparado e convite comercial gerado.");
+  const archive = (tenant) => window.confirm(`Mover ${tenant.name || "este cliente"} para clientes inativos? Os dados serão preservados.`) && run(tenant.id, () => archiveTenant(tenant.id), "Cliente movido para inativos.");
+  const pause = (tenant) => window.confirm(`Pausar o acesso de ${tenant.name || "este cliente"}?`) && run(tenant.id, () => updateTenantSubscription(tenant.id, { subscriptionStatus: "bloqueado" }), "Acesso pausado.");
+  const syncPortal = async () => {
+    setSyncing(true); setNotice(null);
     try {
-      const invite = await createCommercialInvite(planId, status, nextBillingDate);
-      setInviteCode(invite.code);
-      setMessage("Convite comercial gerado.");
+      const result = await syncPortalSnapshot();
+      await load(`${result.summary?.clientCount ?? 0} cliente(s) sincronizado(s) com o Portal Orquestra.cs.`);
     } catch (error) {
-      setMessage(error.message || "Nao foi possivel gerar convite.");
-    }
+      setNotice({ type: "error", text: error.message || "Não foi possível sincronizar com o Portal Orquestra.cs." });
+    } finally { setSyncing(false); }
   };
+  return <div className="oa-admin-page">
+    <div className="oa-page-heading"><h1>Admin Orquestra.cs</h1><p>Central exclusiva da Orquestra.cs para clientes, planos, créditos e bloqueios.</p></div>
+    <section className="oa-admin-shell" aria-busy={loading}>
+      <header className="oa-admin-topbar"><div><h2>Admin Orquestra.cs</h2><p>Controle comercial dos clientes, convites, planos e status de assinatura.</p><span>Clientes sem configuração usam tolerância de 5 dias úteis</span></div><div className="oa-topbar-actions"><small>{lastUpdated ? `Atualizado às ${lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "Aguardando atualização"}</small><button className="oa-btn oa-btn-sync" onClick={syncPortal} disabled={syncing || loading} title="Enviar os dados atualizados para o Portal Orquestra.cs">{syncing ? <Loader2 className="oa-spin" size={15} /> : <RefreshCw size={15} />} {syncing ? "Sincronizando" : "Sincronizar Portal"}</button><button className="oa-btn oa-btn-light" onClick={() => load("Lista atualizada.")} disabled={loading || syncing}>{loading ? <Loader2 className="oa-spin" size={15} /> : <Check size={15} />} {loading ? "Atualizando" : "Atualizar"}</button></div></header>
+      <button className="oa-create-toggle" onClick={() => setNewOpen(!newOpen)} aria-expanded={newOpen}><span className="oa-square-icon"><TicketPlus size={16} /></span><span><strong>Novo cliente e convite comercial</strong><small>Abra para cadastrar os dados completos e gerar o convite de acesso.</small></span>{newOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</button>
+      {newOpen ? <div className="oa-new-panel"><p>Preencha o cadastro comercial completo. O acesso será criado pelo cliente usando o convite.</p><button className="oa-btn oa-btn-primary" onClick={() => setEditing({ ...emptyCustomer })}><TicketPlus size={15} /> Abrir cadastro completo</button>{inviteCode ? <InviteResult code={inviteCode} /> : null}</div> : null}
+      {notice ? <div className={`oa-notice oa-notice-${notice.type}`} role="status">{notice.text}<button onClick={() => setNotice(null)} aria-label="Fechar mensagem"><X size={14} /></button></div> : null}
+      <div className="oa-table-tools"><span>{active.length} cliente(s) ativo(s)</span><button onClick={() => setColumns(DEFAULT_COLUMNS)} title="Restaurar ordem original" aria-label="Restaurar ordem original das colunas"><RotateCcw size={15} /></button></div>
+      <TenantTable tenants={active} loading={loading} columns={columns} expandedId={expandedId} setExpandedId={setExpandedId} dragged={dragged} setDragged={setDragged} drop={drop} busyId={busyId} onEdit={(t) => setEditing(normalize(t))} onPay={setPaymentTenant} onCredits={setCreditTenant} onPause={pause} onArchive={archive} />
+      <section className="oa-inactive-section"><button onClick={() => setInactiveOpen(!inactiveOpen)} aria-expanded={inactiveOpen}><span><strong>Clientes inativos</strong><small>{inactive.length} cadastro(s) preservado(s)</small></span>{inactiveOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}</button>{inactiveOpen ? <InactiveList tenants={inactive} busyId={busyId} onRestore={(t) => run(t.id, () => restoreTenant(t.id), "Cliente restaurado.")} /> : null}</section>
+    </section>
+    {editing ? <CustomerModal initial={editing} busy={busyId === (editing.id || "new")} onClose={() => setEditing(null)} onSave={saveCustomer} /> : null}
+    {paymentTenant ? <PaymentModal tenant={paymentTenant} busy={busyId === paymentTenant.id} onClose={() => setPaymentTenant(null)} onSave={(payment) => run(paymentTenant.id, () => markTenantPaid(paymentTenant, payment).then(() => setPaymentTenant(null)), "Pagamento confirmado e registrado no histórico.")} /> : null}
+    {creditTenant ? <CreditsModal tenant={creditTenant} busy={busyId === creditTenant.id} onClose={() => setCreditTenant(null)} onSave={(credits, reason) => run(creditTenant.id, () => addTenantAiCredits(creditTenant.id, credits, reason).then(() => setCreditTenant(null)), "Créditos adicionados e registrados no histórico.")} /> : null}
+  </div>;
+}
 
-  const saveTenant = async (tenant) => {
-    await updateTenantSubscription(tenant.id, {
-      billingDay: Number(tenant.billingDay || 15),
-      name: tenant.name || tenant.companyName || tenant.id,
-      nextBillingDate: tenant.nextBillingDate || "",
-      planId: tenant.planId,
-      startDate: tenant.startDate || "",
-      subscriptionStatus: tenant.subscriptionStatus
-    });
-    setMessage("Cliente atualizado.");
-    await load();
+function TenantTable({ tenants, loading, columns, expandedId, setExpandedId, dragged, setDragged, drop, busyId, onEdit, onPay, onCredits, onPause, onArchive }) {
+  return <div className="oa-table-scroll"><table className="oa-client-table"><thead><tr>{columns.map((id) => <th key={id} draggable onDragStart={() => setDragged(id)} onDragOver={(e) => e.preventDefault()} onDrop={() => drop(id)} className={dragged === id ? "is-dragging" : ""}><i aria-hidden>⠿</i>{LABELS[id]}</th>)}</tr></thead><tbody>{tenants.map((tenant) => <React.Fragment key={tenant.id}><tr className="oa-tenant-row">{columns.map((column) => <td key={column}>{renderCell(column, tenant, { busyId, onEdit, onPay, onCredits, onPause, onArchive })}</td>)}</tr><tr className="oa-details-row"><td colSpan={columns.length}><button className="oa-details-toggle" onClick={() => setExpandedId(expandedId === tenant.id ? "" : tenant.id)} aria-expanded={expandedId === tenant.id}><span><strong>Detalhes operacionais</strong><small>{tenant.name || tenant.id} · atualização {dateTime(tenant.updatedAt)}</small></span><span>{expandedId === tenant.id ? "Fechar detalhes" : "Abrir detalhes"}</span></button>{expandedId === tenant.id ? <OperationalDetails tenant={tenant} /> : null}</td></tr></React.Fragment>)}{!tenants.length ? <tr><td colSpan={columns.length} className="oa-empty">{loading ? <><Loader2 className="oa-spin" size={18} /> Carregando clientes...</> : "Nenhum cliente ativo encontrado."}</td></tr> : null}</tbody></table></div>;
+}
+
+function renderCell(column, tenant, actions) {
+  const plan = PLANS[tenant.planId] || PLANS.medium, state = billingSituation(tenant), planLimit = limits(tenant.planId), wallet = tenant.aiCredits || { balance: planLimit.credits, bonus: 0 };
+  return ({ client: <div className="oa-client-cell"><strong>{tenant.name || tenant.companyName || "Cliente sem nome"}</strong><span>{tenant.responsibleName || tenant.users?.[0]?.name || "Responsável não informado"}</span><small>{tenant.phone || tenant.accessEmail || "Contato não informado"}</small><div><em>Sem cobrança PIX</em><b>{tenant.online ? "Online" : "Offline"}</b></div></div>, plan: plan.label, status: <span className="oa-status-text">{tenant.subscriptionStatus || "trial"}</span>, startDate: dateOnly(tenant.startDate), dueDate: dateOnly(tenant.nextBillingDate), situation: <span className={`oa-badge oa-badge-${state.tone}`}>{state.label}</span>, lastAccess: dateTime(tenant.lastAccessAt || tenant.lastSeenAt), online: <span className={`oa-badge oa-badge-${tenant.online ? "success" : "muted"}`}>{tenant.online ? "Online" : "Offline"}</span>, credits: <span title={`${wallet.bonus || 0} crédito(s) extra(s)`}>{wallet.balance ?? 0}/{wallet.included ?? planLimit.credits}</span>, actions: <ActionButtons tenant={tenant} {...actions} /> })[column];
+}
+
+function ActionButtons({ tenant, busyId, onEdit, onPay, onCredits, onPause, onArchive }) { const busy = busyId === tenant.id; return <div className="oa-actions">{busy ? <Loader2 className="oa-spin" size={18} /> : <><button className="edit" onClick={() => onEdit(tenant)} title="Editar cadastro" aria-label={`Editar cadastro de ${tenant.name}`}><Edit3 size={15} /></button><button className="pay" onClick={() => onPay(tenant)} title="Confirmar pagamento" aria-label={`Confirmar pagamento de ${tenant.name}`}><CircleDollarSign size={15} /></button><button className="credits" onClick={() => onCredits(tenant)} title="Adicionar créditos de IA" aria-label={`Adicionar créditos de IA para ${tenant.name}`}><Sparkles size={15} /></button><button className="pause" onClick={() => onPause(tenant)} title="Pausar acesso" aria-label={`Pausar acesso de ${tenant.name}`}><Pause size={15} /></button><button className="archive" onClick={() => onArchive(tenant)} title="Mover para inativos" aria-label={`Mover ${tenant.name} para inativos`}><Trash2 size={15} /></button></>}</div>; }
+
+function OperationalDetails({ tenant }) {
+  const users = tenant.users || [], admins = users.filter((u) => ["Proprietario", "Proprietário", "Financeiro"].includes(u.role)), finals = users.filter((u) => !["Proprietario", "Proprietário", "Financeiro"].includes(u.role)), limit = tenant.adminUserLimit ?? limits(tenant.planId).users;
+  return <div className="oa-operational-grid"><section className="oa-detail-card"><header><strong>Sincronização com Portal</strong><span className={`oa-badge oa-badge-${tenant.syncStatus === "error" ? "danger" : tenant.lastSyncAt ? "success" : "muted"}`}>{tenant.lastSyncAt ? tenant.syncStatus || "Sincronizado" : "Não configurado"}</span></header><dl><div><dt>Identificador externo</dt><dd>{tenant.externalId || tenant.id}</dd></div><div><dt>ID interno</dt><dd>{tenant.id}</dd></div><div><dt>dataVersion</dt><dd>{tenant.dataVersion || 1}</dd></div><div><dt>Última atualização</dt><dd>{dateTime(tenant.updatedAt)}</dd></div><div><dt>Última sincronização</dt><dd>{dateTime(tenant.lastSyncAt)}</dd></div>{tenant.lastSyncError ? <div className="oa-sync-error"><dt>Último erro</dt><dd>{tenant.lastSyncError}</dd></div> : null}</dl></section><section className="oa-detail-card oa-users-card"><header><strong><Users size={14} /> Usuários e acessos</strong><span>Administrativos: {admins.length}/{limit}</span></header><UserGroup title="Responsável principal" users={admins.slice(0, 1)} fallbackName={tenant.responsibleName} fallbackEmail={tenant.accessEmail} /><UserGroup title="Colaboradores administrativos" users={admins.slice(1)} /><UserGroup title="Usuários finais" users={finals} /><div className="oa-limit"><span>Limite administrativo do plano</span><strong>{admins.length}/{limit} usados</strong></div></section><section className="oa-detail-card oa-payment-history"><header><strong>Histórico financeiro</strong><span>{tenant.payments?.length || 0} registro(s)</span></header>{tenant.payments?.length ? tenant.payments.slice(0, 5).map((p) => <div className="oa-payment-item" key={p.id}><span><strong>{p.referenceMonth || "Sem referência"}</strong><small>{dateOnly(p.paidAt)} · {p.method || "Não informado"}</small></span><b>{money(p.amount)}</b></div>) : <p>Nenhum pagamento manual registrado.</p>}</section><section className="oa-detail-card oa-payment-history"><header><strong>Histórico de créditos IA</strong><span>{tenant.aiCreditAdjustments?.length || 0} ajuste(s)</span></header>{tenant.aiCreditAdjustments?.length ? tenant.aiCreditAdjustments.slice(0, 5).map((item) => <div className="oa-payment-item" key={item.id}><span><strong>+{item.credits} créditos · {item.type === "portal_purchase" ? "Portal" : "Ajuste manual"}</strong><small>{item.reason || item.packageId || "Sem observação"} · {dateTime(item.createdAt)}</small></span><b>{item.balanceBefore} → {item.balanceAfter}</b></div>) : <p>Nenhum ajuste de créditos registrado.</p>}</section>{tenant.appSnapshot ? <section className="oa-detail-card oa-payment-history"><header><strong>Dados operacionais na nuvem</strong><span>Atualizado {dateTime(tenant.appSnapshot.updatedAt)}</span></header><div className="oa-snapshot-grid">{["clientes", "agendamentos", "servicos", "estoque", "financeiro"].map((key) => <div key={key}><strong>{tenant.appSnapshot.counts?.[key]?.active || 0}</strong><small>{key} ativos</small><em>{tenant.appSnapshot.counts?.[key]?.deleted || 0} arquivados</em></div>)}</div>{tenant.appSnapshot.auditLogs?.length ? <div className="oa-snapshot-audit">{tenant.appSnapshot.auditLogs.slice(0, 5).map((log) => <small key={log.id}>{log.action} · {log.entity} · {dateTime(log.createdAt)}</small>)}</div> : <p>Nenhuma auditoria operacional registrada.</p>}</section> : null}</div>;
+}
+
+function UserGroup({ title, users = [], fallbackName = "", fallbackEmail = "" }) { const list = users.length ? users : fallbackName || fallbackEmail ? [{ id: "fallback", name: fallbackName, email: fallbackEmail, role: "Proprietario" }] : []; return <div className="oa-user-group"><h4><UserRound size={13} /> {title}</h4>{list.length ? list.map((u) => <div className="oa-user-line" key={u.id}><span><strong>{u.name || "Nome não informado"}</strong><small>{u.email || "E-mail não informado"} · {u.role || "Sem função"}</small></span><span><small>{dateTime(u.lastAccessAt || u.lastSeenAt)}</small><b>{u.online ? "Online" : "Offline"}</b></span></div>) : <p>Nenhum usuário cadastrado.</p>}</div>; }
+function InactiveList({ tenants, busyId, onRestore }) { return tenants.length ? <div className="oa-inactive-list">{tenants.map((t) => <article key={t.id}><span><strong>{t.name || t.id}</strong><small>Arquivado em {dateTime(t.archivedAt)}</small></span><button className="oa-btn oa-btn-light" disabled={busyId === t.id} onClick={() => onRestore(t)}><ArchiveRestore size={15} /> Restaurar</button></article>)}</div> : <p className="oa-empty">Nenhum cliente inativo.</p>; }
+function InviteResult({ code }) { const [copied, setCopied] = useState(false); return <div className="oa-invite-result"><span>Convite gerado</span><strong>{code}</strong><button onClick={() => navigator.clipboard.writeText(code).then(() => setCopied(true))}>{copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copiado" : "Copiar"}</button></div>; }
+
+function CustomerModal({ initial, busy, onClose, onSave }) {
+  const [form, setForm] = useState(normalize(initial)); const set = (field, value) => setForm((x) => ({ ...x, [field]: value }));
+  const updatePlan = (planId) => { const plan = limits(planId); setForm((x) => ({ ...x, planId, adminUserLimit: plan.users, collaboratorLimit: plan.users, aiCreditLimit: plan.credits })); };
+  return <div className="oa-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><form className="oa-modal oa-customer-modal" onSubmit={(e) => { e.preventDefault(); if (form.name.trim()) onSave(form); }} role="dialog" aria-modal="true"><ModalHeader title={form.id ? `Editar ${form.name}` : "Novo cliente e convite"} onClose={onClose} /><div className="oa-modal-body"><div className="oa-form-grid"><Field label="Nome da empresa" wide><input required value={form.name} onChange={(e) => set("name", e.target.value)} /></Field><Field label="Plano"><select value={form.planId} onChange={(e) => updatePlan(e.target.value)}>{Object.entries(PLANS).map(([id, p]) => <option value={id} key={id}>{p.label}</option>)}</select></Field><Field label="Situação"><select value={form.subscriptionStatus} onChange={(e) => set("subscriptionStatus", e.target.value)}>{SUBSCRIPTION_STATUSES.map((s) => <option key={s}>{s}</option>)}</select></Field><Field label="Responsável"><input value={form.responsibleName} onChange={(e) => set("responsibleName", e.target.value)} /></Field><Field label="Telefone/WhatsApp"><input value={form.phone} onChange={(e) => set("phone", e.target.value)} /></Field><Field label="E-mail comercial" wide><input type="email" value={form.accessEmail} onChange={(e) => set("accessEmail", e.target.value)} /></Field><Field label="Mensalidade"><input type="number" min="0" step="0.01" value={form.monthlyAmount} onChange={(e) => set("monthlyAmount", e.target.value)} /></Field><Field label="Tolerância após vencimento"><input type="number" min="0" value={form.toleranceDays} onChange={(e) => set("toleranceDays", e.target.value)} /></Field><Field label="Dia de vencimento"><input type="number" min="1" max="31" value={form.billingDay} onChange={(e) => set("billingDay", e.target.value)} /></Field><Field label="Próximo vencimento"><input type="date" value={form.nextBillingDate} onChange={(e) => set("nextBillingDate", e.target.value)} /></Field><Field label="Forma de pagamento"><select value={form.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value)}><option>PIX</option><option>Boleto</option><option>Cartão</option><option>Transferência</option><option>Dinheiro</option></select></Field><Field label="Data de início"><input type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} /></Field><Field label="Observações internas" full><textarea rows="2" value={form.internalNotes} onChange={(e) => set("internalNotes", e.target.value)} /></Field></div><section className="oa-address-section"><h3>Dados cadastrais e localização</h3><p>Consulte os dados quando desejar e confirme antes de salvar.</p><div className="oa-form-grid"><Field label="Link do Google Maps" full><div className="oa-input-action"><input value={form.googleMapsUrl} onChange={(e) => set("googleMapsUrl", e.target.value)} />{form.googleMapsUrl ? <a href={form.googleMapsUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /></a> : null}</div></Field><Field label="Documento"><select value={form.documentType} onChange={(e) => set("documentType", e.target.value)}><option>CPF</option><option>CNPJ</option></select></Field><Field label="Número do documento"><input value={form.documentNumber} onChange={(e) => set("documentNumber", e.target.value)} /></Field><Field label="Razão social"><input value={form.legalName} onChange={(e) => set("legalName", e.target.value)} /></Field><Field label="Nome fantasia"><input value={form.tradeName} onChange={(e) => set("tradeName", e.target.value)} /></Field><Field label="CEP"><input value={form.postalCode} onChange={(e) => set("postalCode", e.target.value)} /></Field><Field label="Endereço" wide><input value={form.addressStreet} onChange={(e) => set("addressStreet", e.target.value)} /></Field><Field label="Número"><input value={form.addressNumber} onChange={(e) => set("addressNumber", e.target.value)} /></Field><Field label="Complemento"><input value={form.addressComplement} onChange={(e) => set("addressComplement", e.target.value)} /></Field><Field label="Bairro"><input value={form.addressDistrict} onChange={(e) => set("addressDistrict", e.target.value)} /></Field><Field label="Cidade"><input value={form.addressCity} onChange={(e) => set("addressCity", e.target.value)} /></Field><Field label="UF"><input maxLength="2" value={form.addressState} onChange={(e) => set("addressState", e.target.value.toUpperCase())} /></Field></div><div className="oa-map-row"><MapPin size={14} /> Dados de localização são armazenados somente no cadastro do cliente.</div></section><section className="oa-limits-section"><h3>Limites comerciais</h3><div className="oa-form-grid"><Field label="Usuários administrativos"><input type="number" min="1" value={form.adminUserLimit} onChange={(e) => set("adminUserLimit", e.target.value)} /></Field><Field label="Colaboradores"><input type="number" min="0" value={form.collaboratorLimit} onChange={(e) => set("collaboratorLimit", e.target.value)} /></Field><Field label="Créditos de IA"><input type="number" min="0" value={form.aiCreditLimit} onChange={(e) => set("aiCreditLimit", e.target.value)} /></Field><Field label="dataVersion"><input type="number" min="1" value={form.dataVersion} onChange={(e) => set("dataVersion", e.target.value)} /></Field></div></section></div><footer><button type="button" className="oa-btn oa-btn-light" onClick={onClose}>Cancelar</button><button className="oa-btn oa-btn-primary" disabled={busy}>{busy ? <Loader2 className="oa-spin" size={15} /> : form.id ? <Save size={15} /> : <TicketPlus size={15} />} {form.id ? "Salvar alterações" : "Salvar e gerar convite"}</button></footer></form></div>;
+}
+
+function CreditsModal({ tenant, busy, onClose, onSave }) {
+  const [credits, setCredits] = useState(100), [reason, setReason] = useState(""), [error, setError] = useState("");
+  const wallet = tenant.aiCredits || { balance: 0, included: PLANS[tenant.planId]?.limits?.aiCredits || 0, bonus: 0, used: 0 };
+  const submit = (event) => {
+    event.preventDefault();
+    const amount = Number(credits), cleanReason = reason.trim();
+    if (!Number.isInteger(amount) || amount < 1 || amount > 100000) return setError("Informe um número inteiro entre 1 e 100.000.");
+    if (cleanReason.length < 5 || cleanReason.length > 300) return setError("O motivo deve ter entre 5 e 300 caracteres.");
+    if (!window.confirm(`Adicionar ${amount} crédito(s) para ${tenant.name}?`)) return;
+    setError("");
+    onSave(amount, cleanReason);
   };
+  return <div className="oa-modal-backdrop"><form className="oa-modal oa-credits-modal" onSubmit={submit} role="dialog" aria-modal="true"><ModalHeader title="Adicionar créditos extras" subtitle={tenant.name} onClose={onClose} /><div className="oa-modal-body"><div className="oa-credit-summary"><strong>Saldo atual: {wallet.balance} crédito(s)</strong><span>Mensais: {wallet.included} · Extras acumulados: {wallet.bonus} · Usados: {wallet.used}</span></div><div className="oa-credit-form"><Field label="Quantidade de créditos"><input type="number" min="1" max="100000" step="1" value={credits} onChange={(event) => setCredits(event.target.value)} /></Field><Field label="Motivo obrigatório"><textarea rows="4" maxLength="300" placeholder="Ex.: compra confirmada do pacote de 300 créditos" value={reason} onChange={(event) => setReason(event.target.value)} /></Field>{error ? <p className="oa-form-error">{error}</p> : null}</div></div><footer><button type="button" className="oa-btn oa-btn-light" onClick={onClose}>Cancelar</button><button className="oa-btn oa-btn-credits" disabled={busy}>{busy ? <Loader2 className="oa-spin" size={15} /> : <Sparkles size={15} />} Adicionar créditos</button></footer></form></div>;
+}
 
-  const setPaid = async (tenant) => {
-    await markTenantPaid(tenant);
-    setMessage("Pagamento confirmado.");
-    await load();
-  };
-
-  const removeTenant = async (tenant) => {
-    const ok = window.confirm(`Arquivar ${tenant.name || tenant.companyName}? Os dados ficam guardados, mas ele sai desta lista.`);
-    if (!ok) return;
-    await archiveTenant(tenant.id);
-    setMessage("Cliente arquivado.");
-    await load();
-  };
-
-  return (
-    <div style={adminWrap}>
-      <section style={panelStyle}>
-        <header style={{ background: "#fffbeb", borderBottom: "1px solid #fde68a", padding: "16px 20px", display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 15, fontWeight: 900 }}>Admin Orquestra.cs</h1>
-            <p style={{ margin: "6px 0 0", color: "#475569", fontSize: 13 }}>Controle comercial dos clientes, convites, planos e status de assinatura.</p>
-          </div>
-          <button style={{ ...buttonDark, background: "#fff", color: "#78350f", border: "1px solid #fcd34d" }} disabled={loading} onClick={load}>
-            <RefreshCw size={14} /> Atualizar
-          </button>
-        </header>
-
-        <div style={{ borderBottom: "1px solid #f1f5f9", padding: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 14, fontWeight: 900 }}>Novo convite comercial</h2>
-          <p style={{ margin: "6px 0 14px", color: "#475569", fontSize: 13 }}>Use este convite para a cliente criar a propria empresa com o plano liberado por voce.</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
-            <select style={inputStyle} value={planId} onChange={(event) => setPlanId(event.target.value)}>
-              {Object.entries(PLANS).map(([id, plan]) => <option key={id} value={id}>{plan.label} - {plan.monthlyPrice}</option>)}
-            </select>
-            <select style={inputStyle} value={status} onChange={(event) => setStatus(event.target.value)}>
-              {SUBSCRIPTION_STATUSES.map((item) => <option key={item}>{item}</option>)}
-            </select>
-            <input style={inputStyle} type="date" value={nextBillingDate} onChange={(event) => setNextBillingDate(event.target.value)} />
-            <button style={buttonDark} onClick={generateInvite}>
-              <TicketPlus size={14} /> Gerar convite
-            </button>
-          </div>
-          {inviteCode ? (
-            <div style={{ marginTop: 14, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", background: "#ecfeff", border: "1px solid #cffafe", borderRadius: 6, padding: "12px 14px", color: "#155e75", fontSize: 12 }}>
-              <span>Codigo:</span>
-              <strong style={{ color: "#020617", fontFamily: "monospace", fontSize: 18, letterSpacing: 1 }}>{inviteCode}</strong>
-              <button style={{ ...buttonDark, height: 30, background: "#fff", color: "#164e63", border: "1px solid #a5f3fc" }} onClick={() => navigator.clipboard.writeText(inviteCode)}>
-                <Copy size={13} /> Copiar
-              </button>
-            </div>
-          ) : null}
-        </div>
-
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", minWidth: 1180, borderCollapse: "collapse", fontSize: 12 }}>
-            <thead>
-              <tr style={{ background: "#f8fafc", color: "#334155", textAlign: "left" }}>
-                <Th>Cliente</Th>
-                <Th>Plano</Th>
-                <Th>Status</Th>
-                <Th>Vencimento</Th>
-                <Th>Inscricao</Th>
-                <Th>Situacao calculada</Th>
-                <Th>Ultimo acesso</Th>
-                <Th>Online</Th>
-                <Th>Creditos IA</Th>
-                <Th>Acao</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {tenants.map((tenant) => {
-                const plan = PLANS[tenant.planId] || PLANS.medium;
-                const sit = situationLabel(tenant);
-                const aiLimit = plan.limits.aiCredits || 0;
-                const aiUsed = tenant.aiUsage?.used || 0;
-                const aiUsageText = `${aiUsed}/${aiLimit}`;
-
-                return (
-                  <React.Fragment key={tenant.id}>
-                    <tr style={{ borderTop: "1px solid #e5e7eb" }}>
-                      <Td>
-                        <strong style={{ display: "block", color: "#020617", fontSize: 13 }}>{tenant.name || tenant.companyName || tenant.id}</strong>
-                        <span style={{ color: "#64748b", fontSize: 11 }}>{tenant.id}</span>
-                      </Td>
-                      <Td>
-                        <select style={inputStyle} value={tenant.planId || "medium"} onChange={(event) => updateTenantLocal(tenant.id, { planId: event.target.value })}>
-                          {Object.entries(PLANS).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}
-                        </select>
-                      </Td>
-                      <Td>
-                        <select style={inputStyle} value={tenant.subscriptionStatus || "trial"} onChange={(event) => updateTenantLocal(tenant.id, { subscriptionStatus: event.target.value })}>
-                          {SUBSCRIPTION_STATUSES.map((item) => <option key={item}>{item}</option>)}
-                        </select>
-                      </Td>
-                      <Td>
-                        <input style={inputStyle} type="date" value={tenant.nextBillingDate || ""} onChange={(event) => updateTenantLocal(tenant.id, { nextBillingDate: event.target.value })} />
-                      </Td>
-                      <Td>
-                        <input style={inputStyle} type="date" value={tenant.startDate || ""} onChange={(event) => updateTenantLocal(tenant.id, { startDate: event.target.value })} />
-                      </Td>
-                      <Td><span style={badgeStyle(sit.tone)}>{sit.text}</span></Td>
-                      <Td>{formatDateTime(tenant.lastAccessAt || tenant.lastSeenAt)}</Td>
-                      <Td><span style={badgeStyle(tenant.online ? "online" : "offline")}>{tenant.online ? `Online agora` : "Offline"}</span></Td>
-                      <Td>{aiUsageText}</Td>
-                      <Td>
-                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                          <button style={buttonDark} onClick={() => saveTenant(tenant)}><Save size={13} /> Salvar</button>
-                          <button style={{ ...buttonDark, background: "#166534" }} onClick={() => setPaid(tenant)} title="Marcar como pago"><CheckCircle2 size={13} /></button>
-                          <button style={{ ...buttonDark, background: "#475569" }} onClick={() => setExpandedId(expandedId === tenant.id ? "" : tenant.id)} title="Ver detalhes"><Eye size={13} /></button>
-                          <button style={{ ...buttonDark, background: "#991b1b" }} onClick={() => removeTenant(tenant)} title="Arquivar cliente"><Archive size={13} /></button>
-                        </div>
-                      </Td>
-                    </tr>
-                    {expandedId === tenant.id ? (
-                      <tr style={{ background: "#f8fafc" }}>
-                        <td colSpan="10" style={{ padding: "12px 14px", color: "#334155", borderTop: "1px solid #e5e7eb" }}>
-                          Inicio: {formatDate(tenant.startDate)} | Vencimento mensal: dia {tenant.billingDay || 15} | Ultima presenca: {formatDateTime(tenant.lastSeenAt)} | Usuarios: {tenant.users?.length || 0}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </React.Fragment>
-                );
-              })}
-              {!tenants.length ? (
-                <tr><td colSpan="10" style={{ padding: 28, textAlign: "center", color: "#64748b" }}>{loading ? "Carregando clientes..." : "Nenhum cliente encontrado."}</td></tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-        {message ? <p style={{ borderTop: "1px solid #f1f5f9", margin: 0, padding: "12px 20px", color: "#334155", fontSize: 13, fontWeight: 700 }}>{message}</p> : null}
-      </section>
-    </div>
-  );
-};
-
-const Th = ({ children }) => <th style={{ padding: "12px 14px", fontSize: 12, fontWeight: 900, whiteSpace: "nowrap" }}>{children}</th>;
-const Td = ({ children }) => <td style={{ padding: "11px 14px", verticalAlign: "middle", color: "#0f172a" }}>{children}</td>;
-
-export default PlatformAdmin;
+function PaymentModal({ tenant, busy, onClose, onSave }) { const [form, setForm] = useState({ amount: tenant.monthlyAmount || 0, paidAt: new Date().toISOString().slice(0, 10), referenceMonth: new Date().toISOString().slice(0, 7), nextBillingDate: tenant.nextBillingDate || "", method: tenant.paymentMethod || "PIX", note: "" }); const set = (f, v) => setForm((x) => ({ ...x, [f]: v })); return <div className="oa-modal-backdrop"><form className="oa-modal oa-payment-modal" onSubmit={(e) => { e.preventDefault(); onSave(form); }}><ModalHeader title="Registrar pagamento" subtitle={tenant.name} onClose={onClose} /><div className="oa-modal-body oa-form-grid"><Field label="Valor"><input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => set("amount", e.target.value)} /></Field><Field label="Data do pagamento"><input type="date" value={form.paidAt} onChange={(e) => set("paidAt", e.target.value)} /></Field><Field label="Referência mensal"><input type="month" value={form.referenceMonth} onChange={(e) => set("referenceMonth", e.target.value)} /></Field><Field label="Próximo vencimento"><input type="date" value={form.nextBillingDate} onChange={(e) => set("nextBillingDate", e.target.value)} /></Field><Field label="Forma de pagamento"><select value={form.method} onChange={(e) => set("method", e.target.value)}><option>PIX</option><option>Boleto</option><option>Cartão</option><option>Transferência</option><option>Dinheiro</option></select></Field><Field label="Observação" wide><input value={form.note} onChange={(e) => set("note", e.target.value)} /></Field></div><footer><button type="button" className="oa-btn oa-btn-light" onClick={onClose}>Cancelar</button><button className="oa-btn oa-btn-primary" disabled={busy}>{busy ? <Loader2 className="oa-spin" size={15} /> : <CircleDollarSign size={15} />} Confirmar pagamento</button></footer></form></div>; }
+function ModalHeader({ title, subtitle = "Altere os dados e salve tudo de uma vez.", onClose }) { return <header><div><span>Cadastro completo do cliente</span><h2>{title}</h2><p>{subtitle}</p></div><button type="button" onClick={onClose} aria-label="Fechar"><X size={17} /></button></header>; }
+function Field({ label, children, wide, full }) { return <label className={`oa-field ${wide ? "oa-field-wide" : ""} ${full ? "oa-field-full" : ""}`}><span>{label}</span>{children}</label>; }

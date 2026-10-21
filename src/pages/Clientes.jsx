@@ -1,11 +1,22 @@
 import React, { useState } from 'react';
-import { Search, Plus, Edit2, Trash2, History, MessageCircle } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, History, MessageCircle, AlertTriangle } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import ClienteFormModal from '../components/ClienteFormModal';
 import ClienteHistoricoModal from '../components/ClienteHistoricoModal';
+import { getSubscriptionAccess } from '../services/commercialService';
+
+const countClientVehicles = (items) => items.reduce((total, cliente) => {
+  if (Array.isArray(cliente.veiculos) && cliente.veiculos.length) return total + cliente.veiculos.length;
+  return total + 1;
+}, 0);
 
 const Clientes = () => {
   const { clientes, agendamentos, addCliente, updateCliente, deleteCliente } = useData();
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  const access = getSubscriptionAccess(currentUser);
+  const vehicleLimit = access.plan.limits.vehicles;
+  const vehicleUsage = countClientVehicles(clientes);
+  const reachedVehicleLimit = currentUser?.role !== 'dev' && vehicleLimit > 0 && vehicleUsage >= vehicleLimit;
   const [busca, setBusca] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -22,6 +33,11 @@ const Clientes = () => {
     if (clienteEditando) {
       updateCliente(clienteEditando.id, dadosCliente);
     } else {
+      const newVehicles = countClientVehicles([dadosCliente]);
+      if (currentUser?.role !== 'dev' && vehicleLimit > 0 && vehicleUsage + newVehicles > vehicleLimit) {
+        alert(`Limite do ${access.plan.label} atingido: ${vehicleLimit} clientes/veiculos. Para continuar cadastrando, solicite liberacao ou upgrade para o Plano Premium.`);
+        return;
+      }
       addCliente(dadosCliente);
     }
     setIsModalOpen(false);
@@ -52,10 +68,17 @@ const Clientes = () => {
     <div>
       <div className="page-header">
         <h1 className="page-title">Gestão de Clientes</h1>
-        <button className="action-btn" onClick={abrirPainelNovo}>
+        <button className="action-btn" onClick={abrirPainelNovo} disabled={reachedVehicleLimit} title={reachedVehicleLimit ? 'Limite do plano atingido' : 'Novo Cliente'}>
           <Plus size={18} /> Novo Cliente
         </button>
       </div>
+
+      {reachedVehicleLimit ? (
+        <div className="card" style={{ marginBottom: 24, borderColor: 'rgba(245,158,11,.35)', background: 'rgba(245,158,11,.1)', color: '#fde68a', display: 'flex', gap: 10, alignItems: 'center' }}>
+          <AlertTriangle size={18} />
+          Limite do {access.plan.label} atingido: {vehicleUsage}/{vehicleLimit} clientes/veiculos. Solicite liberacao ou upgrade para continuar cadastrando.
+        </div>
+      ) : null}
 
       <div className="card" style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>

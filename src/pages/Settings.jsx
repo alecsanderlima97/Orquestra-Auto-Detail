@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
 import { Copy, Download, Upload, Shield, Database, Palette, User as UserIcon, Camera, Save as SaveIcon, UserPlus } from 'lucide-react';
-import { ROLES, canManageUsers, createInternalInvite } from '../services/commercialService';
+import { ROLES, canManageUsers, createInternalInvite, getSubscriptionAccess, listTenantInvites, listTenantUsers } from '../services/commercialService';
 
 const Settings = () => {
   const { exportData, importData, theme, setTheme, userProfile, setUserProfile } = useData();
   const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  const access = getSubscriptionAccess(currentUser);
   const [inviteRole, setInviteRole] = useState('Financeiro');
   const [internalInvite, setInternalInvite] = useState('');
   const [inviteMessage, setInviteMessage] = useState('');
@@ -69,6 +70,16 @@ const Settings = () => {
 
   const handleInternalInvite = async () => {
     try {
+      const [tenantUsers, tenantInvites] = await Promise.all([
+        listTenantUsers(currentUser.tenantId),
+        listTenantInvites(currentUser.tenantId)
+      ]);
+      const activeInvites = tenantInvites.filter((invite) => invite.status === 'Ativo').length;
+      const userLimit = access.plan.limits.users || 0;
+      if (currentUser?.role !== 'dev' && userLimit > 0 && tenantUsers.length + activeInvites + 1 > userLimit) {
+        setInviteMessage(`Limite do ${access.plan.label} atingido: ${userLimit} usuario(s). Cancele convites ativos, remova usuarios ou solicite upgrade.`);
+        return;
+      }
       const invite = await createInternalInvite(currentUser.tenantId, currentUser.companyName, inviteRole);
       setInternalInvite(invite.code);
       setInviteMessage('Convite interno gerado.');

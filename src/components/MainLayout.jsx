@@ -6,7 +6,7 @@ import Calculator from './Calculator';
 import Footer from './Footer';
 import GuideAssistant from './GuideAssistant';
 import AiAssistant from '../pages/AiAssistant';
-import { Bot, X } from 'lucide-react';
+import { AlertTriangle, Bot, X } from 'lucide-react';
 import { getSubscriptionAccess } from '../services/commercialService';
 
 const MainLayout = () => {
@@ -45,7 +45,14 @@ const MainLayout = () => {
       <div className="content-wrapper">
         <Header />
         <main className="main-content">
-          {access.blocked && currentUser?.role !== 'dev' ? <BlockedSubscription access={access} currentUser={currentUser} /> : <Outlet />}
+          {access.blocked && currentUser?.role !== 'dev' ? (
+            <BlockedSubscription access={access} currentUser={currentUser} />
+          ) : (
+            <>
+              {currentUser?.role !== 'dev' ? <BillingReminder access={access} currentUser={currentUser} /> : null}
+              <Outlet />
+            </>
+          )}
         </main>
         <Footer />
       </div>
@@ -101,6 +108,30 @@ const MainLayout = () => {
           }
         `}
       </style>
+    </div>
+  );
+};
+
+const BillingReminder = ({ access, currentUser }) => {
+  if (!currentUser?.nextBillingDate || !access.warning) return null;
+
+  const supportMessage = encodeURIComponent(`Ola, quero regularizar a assinatura do Orquestra Auto Detail. Empresa: ${currentUser?.companyName || 'Cliente'}. Vencimento: ${currentUser.nextBillingDate}.`);
+  const supportUrl = `https://wa.me/5515998478705?text=${supportMessage}`;
+  const isPastDue = access.pastDueDays > 0;
+  const isDueToday = access.dueInDays === 0;
+  const text = isPastDue
+    ? `Sua assinatura venceu ha ${access.pastDueDays} dia(s). O acesso sera bloqueado apos 5 dias corridos do vencimento.`
+    : isDueToday
+      ? 'Sua assinatura vence hoje. Regularize para evitar o bloqueio automatico.'
+      : `Sua assinatura vence em ${access.dueInDays} dia(s). Regularize para manter o acesso ativo.`;
+
+  return (
+    <div className="billing-reminder">
+      <div>
+        <strong><AlertTriangle size={17} /> Aviso de assinatura</strong>
+        <p>{text}</p>
+      </div>
+      <a href={supportUrl} target="_blank" rel="noreferrer">Falar com suporte</a>
     </div>
   );
 };
