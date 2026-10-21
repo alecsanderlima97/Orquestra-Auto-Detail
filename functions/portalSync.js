@@ -89,6 +89,7 @@ function buildPortalClient({ tenantId, tenant = {}, users = [], payments = [], g
             startDate: cleanString(tenant.startDate),
             renewalDate: cleanString(tenant.nextBillingDate),
             paymentMethod: cleanString(tenant.paymentMethod),
+            billingStatus: cleanString(tenant.billingStatus || tenant.subscriptionStatus),
             subscriptionStatus: cleanString(tenant.subscriptionStatus),
             administrativeUserLimit: Math.max(0, Number(tenant.adminUserLimit) || 0),
             collaboratorLimit: Math.max(0, Number(tenant.collaboratorLimit) || 0),
