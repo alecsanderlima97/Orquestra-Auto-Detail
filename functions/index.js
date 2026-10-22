@@ -554,6 +554,113 @@ exports.adminSyncPortal = functions
         }
     });
 
+exports.receivePortalCommand = functions
+    .runWith({ secrets: ['ORQUESTRA_CONNECTOR_SHARED_SECRET'] })
+    .https.onRequest(async (req, res) => {
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido.' });
+        const expectedSecret = String(process.env.ORQUESTRA_CONNECTOR_SHARED_SECRET || '').trim();
+        const authorization = req.get('authorization') || '';
+        const receivedSecret = String(req.get('x-orquestra-connector-secret') || authorization.replace(/^Bearer\s+/i, '')).trim();
+        const receivedBuffer = Buffer.from(receivedSecret);
+        const expectedBuffer = Buffer.from(expectedSecret);
+        if (!expectedSecret || receivedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(receivedBuffer, expectedBuffer)) {
+            return res.status(401).json({ error: 'Conector não autorizado.' });
+        }
+
+        const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+        const commandId = String(body.commandId || '').trim();
+        const sourceSystem = String(body.sourceSystem || '').trim();
+        const targetSystem = String(body.targetSystem || '').trim();
+        const commandType = String(body.commandType || '').trim();
+        const externalTenantId = String(body.externalTenantId || '').trim();
+        const contract = body.contract && typeof body.contract === 'object' && !Array.isArray(body.contract) ? body.contract : {};
+        if (!commandId || !externalTenantId || sourceSystem !== 'orquestra_portal' || targetSystem !== 'orquestra_auto_detail' || commandType !== 'tenant.updated') {
+            return res.status(400).json({ error: 'Comando contratual inválido.' });
+        }
+
+        const tenantId = externalTenantId.replace(/^orquestra_auto_detail_/, '');
+        const tenantRef = db.collection('tenants').doc(tenantId);
+        const commandRef = db.collection('connectorCommands').doc(commandId);
+        const updates = {};
+        const plan = String(contract.plan || '').trim();
+        if (['starter', 'medium', 'premium'].includes(plan)) updates.planId = plan;
+        const monthlyAmount = contract.monthlyFee === null || contract.monthlyFee === undefined || contract.monthlyFee === '' ? null : Number(contract.monthlyFee);
+        const billingDay = contract.billingDay === null || contract.billingDay === undefined || contract.billingDay === '' ? null : Number(contract.billingDay);
+        const toleranceDays = contract.graceDays === null || contract.graceDays === undefined || contract.graceDays === '' ? null : Number(contract.graceDays);
+        const startDate = String(contract.startDate || '').trim();
+        const nextBillingDate = String(contract.renewalDate || contract.nextDueDate || '').trim();
+        const paymentMethod = String(contract.paymentMethod || '').trim();
+        const subscriptionStatus = String(contract.subscriptionStatus || '').trim();
+        const internalNotes = String(contract.notes || '').trim();
+        if (monthlyAmount !== null && (!Number.isFinite(monthlyAmount) || monthlyAmount < 0)) return res.status(400).json({ error: 'Mensalidade inválida.' });
+        if (billingDay !== null && (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31)) return res.status(400).json({ error: 'Dia de vencimento inválido.' });
+        if (toleranceDays !== null && (!Number.isInteger(toleranceDays) || toleranceDays < 0 || toleranceDays > 60)) return res.status(400).json({ error: 'Tolerância inválida.' });
+        if (startDate && !/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(startDate)) return res.status(400).json({ error: 'Data de início inválida.' });
+        if (nextBillingDate && !/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(nextBillingDate)) return res.status(400).json({ error: 'Data de renovação inválida.' });
+        if (['trial', 'ativo', 'vencido', 'bloqueado', 'cancelado'].includes(subscriptionStatus)) updates.subscriptionStatus = subscriptionStatus;
+        if (monthlyAmount !== null) updates.monthlyAmount = monthlyAmount;
+        if (billingDay !== null) updates.billingDay = billingDay;
+        if (toleranceDays !== null) updates.toleranceDays = toleranceDays;
+        if (startDate) updates.startDate = startDate.slice(0, 10);
+        if (nextBillingDate) updates.nextBillingDate = nextBillingDate.slice(0, 10);
+        if (paymentMethod) updates.paymentMethod = paymentMethod.slice(0, 80);
+        if (internalNotes) updates.internalNotes = internalNotes.slice(0, 1000);
+
+        try {
+            let duplicate = false;
+            await db.runTransaction(async (transaction) => {
+                const [commandSnapshot, tenantSnapshot] = await Promise.all([transaction.get(commandRef), transaction.get(tenantRef)]);
+                if (commandSnapshot.exists) { duplicate = true; return; }
+                if (!tenantSnapshot.exists) throw new Error('tenant_not_found');
+                transaction.update(tenantRef, { ...updates, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+                const now = new Date().toISOString();
+                transaction.create(commandRef, { commandId, commandType, sourceSystem, targetSystem, externalTenantId, status: 'applied', fields: Object.keys(updates), createdAt: now, appliedAt: now });
+                transaction.set(tenantRef.collection('audit').doc(commandId), { action: 'tenant.contract_updated_from_portal', actorEmail: 'orquestra_portal', actorUid: 'orquestra_portal', details: { fields: Object.keys(updates) }, createdAt: now });
+            });
+            return res.json({ ok: true, duplicate, tenantId });
+        } catch (error) {
+            if (error instanceof Error && error.message === 'tenant_not_found') return res.status(404).json({ error: 'Empresa de origem não encontrada.' });
+            console.error('[Portal] Comando contratual recusado.', error.message || 'unknown');
+            return res.status(500).json({ error: 'Não foi possível aplicar o comando no sistema de origem.' });
+        }
+    });
+
+exports.syncPortalSnapshotScheduled = functions
+    .runWith({ secrets: ['ORQUESTRA_PORTAL_CONNECTOR_URL', 'ORQUESTRA_CONNECTOR_SHARED_SECRET'] })
+    .pubsub
+    .schedule('every 15 minutes')
+    .timeZone('America/Sao_Paulo')
+    .onRun(async () => {
+        const endpoint = String(process.env.ORQUESTRA_PORTAL_CONNECTOR_URL || '').trim();
+        const sharedSecret = String(process.env.ORQUESTRA_CONNECTOR_SHARED_SECRET || '').trim();
+        if (!endpoint || !sharedSecret || !isConnectorUrlAllowed(endpoint)) throw new Error('Portal connector not configured.');
+        const snapshot = await buildAutoDetailPortalSnapshot();
+        try {
+            const response = await axios.post(endpoint, snapshot.serializedPayload, {
+                headers: {
+                    Authorization: `Bearer ${sharedSecret}`,
+                    'Content-Type': 'application/json',
+                    'X-Orquestra-Contract-Version': CONTRACT_VERSION,
+                    'X-Orquestra-Source-System': SOURCE_SYSTEM
+                },
+                maxContentLength: 5 * 1024 * 1024,
+                timeout: 30000,
+                validateStatus: () => true
+            });
+            if (response.status < 200 || response.status >= 300) {
+                const message = `Portal recusou a sincronização (HTTP ${response.status}).`;
+                await persistPortalSync(snapshot.clients, 'error', message);
+                throw new Error(message);
+            }
+            await persistPortalSync(snapshot.clients, 'success');
+        } catch (error) {
+            await persistPortalSync(snapshot.clients, 'error', 'Falha de comunicação com o Portal Orquestra.cs.').catch(() => undefined);
+            console.error('[Portal] Sincronização agendada indisponível.', error.code || error.message || 'unknown');
+            throw error;
+        }
+        return null;
+    });
+
 // Carteira de créditos da IA -------------------------------------------------
 async function requireTenantMembership(context, tenantId) {
     requireAuthenticated(context);
