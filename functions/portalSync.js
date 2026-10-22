@@ -1,6 +1,7 @@
 const SOURCE_SYSTEM = 'orquestra_auto_detail';
 const CONTRACT_VERSION = 'v1';
 const DATA_VERSION = 1;
+const PLATFORM_ADMIN_EMAIL = 'orquestracs@gmail.com';
 
 function cleanString(value) {
     const text = String(value ?? '').trim();
@@ -32,7 +33,7 @@ function isConnectorUrlAllowed(value) {
 
 function buildPortalClient({ tenantId, tenant = {}, users = [], payments = [], generatedAt }) {
     const externalId = externalCustomerId(tenantId, tenant.externalId || tenant.externalCustomerId);
-    const normalizedUsers = users.map((user) => ({
+    const normalizedUsers = users.filter((user) => cleanString(user.email)?.toLowerCase() !== PLATFORM_ADMIN_EMAIL).map((user) => ({
         id: cleanString(user.id),
         name: cleanString(user.name),
         email: cleanString(user.email),
