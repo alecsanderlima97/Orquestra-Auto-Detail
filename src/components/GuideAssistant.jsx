@@ -58,7 +58,8 @@ const GuideAssistant = ({ userId }) => {
   const storageKey = `auto-detail-guide-dismissed-${userId || 'user'}`;
   const completedKey = `auto-detail-guide-completed-${userId || 'user'}`;
   const [visible, setVisible] = useState(() => localStorage.getItem(storageKey) !== '1');
-  const [minimized, setMinimized] = useState(false);
+  // Em telas pequenas começa minimizado para não cobrir a agenda ao abrir.
+  const [minimized, setMinimized] = useState(() => typeof window !== "undefined" && Boolean(window.matchMedia?.("(max-width: 768px)").matches));
   const [completed, setCompleted] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(completedKey) || '[]');

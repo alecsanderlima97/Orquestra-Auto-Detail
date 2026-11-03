@@ -69,7 +69,7 @@ const Header = () => {
         <MusicPlayer />
       </div>
 
-      <div className="header-brand" style={{ 
+      <div className="header-brand header-brand-title" style={{ 
         display: 'flex', 
         alignItems: 'center', 
         gap: '12px', 

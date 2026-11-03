@@ -1440,3 +1440,27 @@ body {
     justify-content: flex-end;
   }
 }
+
+/* Agenda: layout e área de toque para celular e notebook */
+.agenda-header-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.agenda-availability-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; }
+.agenda-page-header .action-btn { min-height: 44px; }
+.agenda-page-header .action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+@media (max-width: 640px) {
+  .agenda-page-header { flex-direction: column; align-items: stretch; }
+  .agenda-page-header .page-title { font-size: 22px; }
+  .agenda-header-actions { width: 100%; }
+  .agenda-header-actions .action-btn { flex: 1 1 auto; justify-content: center; }
+  .agenda-availability-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+/* Cabeçalho: título da marca não corta no celular */
+@media (max-width: 768px) {
+  .header-brand-title { font-size: 13px !important; left: 50% !important; white-space: nowrap; letter-spacing: 0.5px !important; }
+}
