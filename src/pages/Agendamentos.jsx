@@ -261,7 +261,7 @@ const Agendamentos = () => {
           <p style={{ color: '#aaa', marginTop: '8px' }}>Gestão de fluxos e ocupação da estética automotiva</p>
         </div>
         <div className="agenda-header-actions">
-             <button className="action-btn" style={{ background: 'rgba(255,255,255,0.05)', color: '#888' }} onClick={() => setDataVista(new Date())}>
+             <button className="action-btn" style={{ background: 'rgba(255,255,255,0.05)', color: '#d4d4d4' }} onClick={() => setDataVista(new Date())}>
                 Hoje
              </button>
             <button className="action-btn" disabled={reachedAppointmentLimit} title={reachedAppointmentLimit ? 'Limite mensal do plano atingido' : 'Novo Agendamento'} onClick={() => { setAgendamentoParaEditar(null); setIsModalOpen(true); }}>
