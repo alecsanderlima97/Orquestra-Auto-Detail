@@ -22,6 +22,11 @@ const {
     buildPortalPayload,
     isConnectorUrlAllowed
 } = require('./portalSync');
+const {
+    isTenantActiveForAutomation,
+    selectBirthdayTargets,
+    selectReminderTargets
+} = require('./automationRules');
 require('dayjs/locale/pt-br');
 
 // Inicializa o Firebase Admin
@@ -31,146 +36,150 @@ dayjs.locale('pt-br');
 const db = admin.firestore();
 
 // CONFIGURAÇÃO DA API DE WHATSAPP
-// A API_KEY será lida com segurança dos Secrets do Firebase
-const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || 'http://orquestracs.com:8080'; 
+// Segredos vêm de variáveis de ambiente (Secrets do Firebase). Nada de chave no código.
+// A URL precisa ser HTTPS: a chave viaja no cabeçalho e não pode trafegar em texto puro.
+const WHATSAPP_API_URL = String(process.env.WHATSAPP_API_URL || '').trim().replace(/\/+$/, '');
 const WHATSAPP_INSTANCE = process.env.WHATSAPP_INSTANCE || 'Orquestra_Auto_Detail';
 
+/** Mascara o telefone nos logs (LGPD: minimizar dados pessoais em registros). */
+function maskPhone(number) {
+    const digits = String(number || '').replace(/\D/g, '');
+    return digits ? `***${digits.slice(-4)}` : '(vazio)';
+}
+
 /**
- * Função para disparar a mensagem via Gateway
- * Agora preparada para receber configurações dinâmicas no futuro
+ * Envia uma mensagem pelo gateway. Retorna true somente se o gateway aceitou.
+ * Falha fechada: sem URL HTTPS ou sem chave, nada é enviado.
  */
 async function sendWhatsApp(to, message, config = {}) {
-    const url = config.url || WHATSAPP_API_URL;
+    const url = String(config.url || WHATSAPP_API_URL).trim().replace(/\/+$/, '');
     const key = config.key || process.env.WHATSAPP_API_KEY;
     const instance = config.instance || WHATSAPP_INSTANCE;
+    const cleanNumber = String(to || '').replace(/\D/g, '');
+
+    if (!url.startsWith('https://')) {
+        console.error('[WhatsApp] WHATSAPP_API_URL ausente ou sem HTTPS. Envio cancelado.');
+        return false;
+    }
+    if (!key) {
+        console.error('[WhatsApp] WHATSAPP_API_KEY ausente. Envio cancelado.');
+        return false;
+    }
+    if (!cleanNumber) return false;
 
     try {
-        const cleanNumber = to.replace(/\D/g, '');
-        console.log(`[WhatsApp] Enviando para ${cleanNumber} via ${instance}...`);
-        
-        const response = await axios.post(`${url}/message/sendText/${instance}`, {
+        await axios.post(`${url}/message/sendText/${encodeURIComponent(instance)}`, {
             number: cleanNumber,
             text: message,
             linkPreview: true
         }, {
-            headers: { 'apikey': key },
-            timeout: 10000 // 10 segundos de timeout
+            headers: { apikey: key },
+            timeout: 10000
         });
-        
-        console.log(`[WhatsApp] Sucesso ao enviar para ${cleanNumber}`);
-        return response.data;
+        console.log(`[WhatsApp] Enviado para ${maskPhone(cleanNumber)}`);
+        return true;
     } catch (error) {
-        console.error(`[WhatsApp] Erro ao enviar para ${to}:`, error.response?.data || error.message);
-        return null;
+        console.error(`[WhatsApp] Falha ao enviar para ${maskPhone(cleanNumber)}: ${error.response?.status ?? error.message}`);
+        return false;
     }
 }
 
-/**
- * Função de TESTE MANUAL (HTTP)
- * Acesse a URL gerada no deploy para disparar os testes
- */
-exports.testWhatsAppNow = functions.https.onRequest(async (req, res) => {
-    try {
-        const amanhã = dayjs().add(1, 'day').format('DD/MM/YYYY');
-        console.log(`[TESTE] Executando disparo manual para: ${amanhã}`);
-
-        const snapshot = await db.collection('agendamentos')
-            .where('dataStr', '==', amanhã)
-            .get();
-
-        if (snapshot.empty) {
-            return res.status(200).send(`Nenhum agendamento encontrado para amanhã (${amanhã}). Crie um agendamento no Firestore para testar.`);
-        }
-
-        let enviados = 0;
-        for (const doc of snapshot.docs) {
-            const data = doc.data();
-            const msg = `🧪 *TESTE DE AUTOMAÇÃO* 🧪\n\nOlá, *${data.cliente}*! Este é um teste do seu novo sistema de lembretes automáticos para amanhã às ${data.horario}.`;
-            const success = await sendWhatsApp(data.telefone, msg);
-            if (success) enviados++;
-        }
-
-        res.status(200).send(`Teste concluído! Agendamentos de amanhã: ${snapshot.size}. Mensagens enviadas: ${enviados}. Verifique os logs e o WhatsApp.`);
-    } catch (error) {
-        res.status(500).send(`Erro no teste: ${error.message}`);
+/** Tenants ativos com seus dados operacionais (agenda e clientes ficam em appData/main). */
+async function loadAutomationTenants() {
+    const tenantsSnap = await db.collection('tenants').get();
+    const tenants = [];
+    for (const tenantDoc of tenantsSnap.docs) {
+        const tenant = tenantDoc.data() || {};
+        if (!isTenantActiveForAutomation(tenant)) continue;
+        const appSnap = await tenantDoc.ref.collection('appData').doc('main').get();
+        if (!appSnap.exists) continue;
+        tenants.push({ id: tenantDoc.id, ref: tenantDoc.ref, data: appSnap.data() || {} });
     }
-});
+    return tenants;
+}
+
+/** Chaves já enviadas para um tipo de automação em um período (dia ou ano). */
+async function loadSentKeys(tenantRef, kind, period) {
+    const snap = await tenantRef.collection('reminderLog')
+        .where('kind', '==', kind)
+        .where('period', '==', period)
+        .get();
+    return new Set(snap.docs.map((doc) => String(doc.get('key'))));
+}
+
+/** Registra envio para impedir mensagem duplicada na próxima execução. */
+async function logSent(tenantRef, kind, key, period) {
+    const docId = `${kind}-${key}`.replace(/\//g, '_');
+    await tenantRef.collection('reminderLog').doc(docId).set({
+        kind,
+        key: String(key),
+        period: String(period),
+        sentAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+}
 
 /**
- * Automação 1: Lembrete de Agendamento (24h antes)
- * Roda todos os dias às 18:00
+ * Automação 1: Lembrete de Agendamento (véspera)
+ * Roda todos os dias às 18:00 (Brasília)
  */
 exports.scheduledAppointmentReminders = functions
     .runWith({ secrets: ['WHATSAPP_API_KEY'] })
     .pubsub
-    .schedule('0 18 * * *') // Todo dia às 18:00
+    .schedule('0 18 * * *')
     .timeZone('America/Sao_Paulo')
-    .onRun(async (context) => {
+    .onRun(async () => {
         const amanha = dayjs().add(1, 'day').format('DD/MM/YYYY');
-        console.log(`Buscando agendamentos para: ${amanha}`);
+        const tenants = await loadAutomationTenants();
+        let enviados = 0;
 
-        const snapshot = await db.collection('agendamentos')
-            .where('dataStr', '==', amanha)
-            .where('status', 'not-in', ['Cancelado', 'Concluído'])
-            .get();
+        for (const tenant of tenants) {
+            const sent = await loadSentKeys(tenant.ref, 'reminder', amanha);
+            const targets = selectReminderTargets(tenant.data.agendamentos, amanha, sent);
 
-        if (snapshot.empty) {
-            console.log('Nenhum agendamento encontrado para amanhã.');
-            return null;
+            for (const ag of targets) {
+                const msg = `Olá, *${ag.cliente}*! 🚗✨\n\nPassando para confirmar seu serviço de *${ag.servico}* agendado para amanhã, dia *${ag.dataStr}* às *${ag.horario}*.\n\nPodemos confirmar? Aguardamos você!`;
+                const ok = await sendWhatsApp(ag.telefone, msg);
+                if (ok) {
+                    await logSent(tenant.ref, 'reminder', String(ag.id), amanha);
+                    enviados++;
+                }
+            }
         }
 
-        const promises = snapshot.docs.map(async (doc) => {
-            const data = doc.data();
-            if (data.lembreteAutomotivoEnviado) return; // Evita duplicidade
-
-            const msg = `Olá, *${data.cliente}*! 🚗✨\n\nPassando para confirmar seu serviço de *${data.servico}* agendado para amanhã, dia *${data.dataStr}* às *${data.horario}*.\n\nPodemos confirmar? Aguardamos você!`;
-
-            const success = await sendWhatsApp(data.telefone, msg);
-            if (success) {
-                await doc.ref.update({ lembreteAutomotivoEnviado: true });
-            }
-        });
-
-        await Promise.all(promises);
-        console.log('Processamento de lembretes concluído.');
+        console.log(`[Lembretes] ${amanha}: ${enviados} enviado(s) em ${tenants.length} tenant(s).`);
         return null;
     });
 
 /**
- * Automação 2: Lembrete de Aniversário
- * Roda todos os dias às 09:00
+ * Automação 2: Parabéns de aniversário
+ * Roda todos os dias às 09:00 (Brasília)
  */
 exports.scheduledBirthdayWishes = functions
     .runWith({ secrets: ['WHATSAPP_API_KEY'] })
     .pubsub
-    .schedule('0 9 * * *') // Todo dia às 09:00
+    .schedule('0 9 * * *')
     .timeZone('America/Sao_Paulo')
-    .onRun(async (context) => {
-        const hojeMesDia = dayjs().format('MM-DD');
-        console.log(`Buscando aniversariantes do dia: ${hojeMesDia}`);
+    .onRun(async () => {
+        const mmdd = dayjs().format('MM-DD');
+        const year = dayjs().year();
+        const tenants = await loadAutomationTenants();
+        let enviados = 0;
 
-        const snapshot = await db.collection('clientes').get();
+        for (const tenant of tenants) {
+            const sent = await loadSentKeys(tenant.ref, 'birthday', String(year));
+            const targets = selectBirthdayTargets(tenant.data.clientes, mmdd, year, sent);
 
-        const aniversariantes = snapshot.docs.filter(doc => {
-            const data = doc.data();
-            if (!data.dataAniversario) return false;
-            return data.dataAniversario.endsWith(hojeMesDia);
-        });
-
-        if (aniversariantes.length === 0) {
-            console.log('Nenhum aniversariante hoje.');
-            return null;
+            for (const cliente of targets) {
+                const msg = `Parabéns, *${cliente.nome}*! 🎂🎉\n*FELIZ ANIVERSÁRIO!* 🥳🎊\n\nMuita saúde, paz, harmonia, sucesso e incontáveis realizações!!! Esperamos que no próximo ano, possamos mais uma vez celebrar muitas conquistas.\n\n— *Orquestra Auto Detail* 🚗✨`;
+                const ok = await sendWhatsApp(cliente.telefone, msg);
+                if (ok) {
+                    await logSent(tenant.ref, 'birthday', `${cliente.id}-${year}`, String(year));
+                    enviados++;
+                }
+            }
         }
 
-        const promises = aniversariantes.map(async (doc) => {
-            const data = doc.data();
-            const msg = `Parabéns, *${data.nome}*! 🎂🎉\n*FELIZ ANIVERSÁRIO!* 🥳🎊\n\nMuita saúde, paz, harmonia, sucesso e incontáveis realizações!!! Esperamos que no próximo ano, possamos mais uma vez celebrar muitas conquistas.\n\n— *Orquestra Auto Detail* 🚗✨`;
-
-            await sendWhatsApp(data.telefone, msg);
-        });
-
-        await Promise.all(promises);
-        console.log('Processamento de aniversários concluído.');
+        console.log(`[Aniversários] ${mmdd}: ${enviados} enviado(s) em ${tenants.length} tenant(s).`);
         return null;
     });
 

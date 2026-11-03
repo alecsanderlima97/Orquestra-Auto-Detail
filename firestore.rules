@@ -89,12 +89,17 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /reminderLog/{logId} {
+        allow read: if isPlatformAdmin() || canManageTenant(tenantId);
+        allow write: if false;
+      }
+
       match /{collectionName}/{documentId} {
-        allow read: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit"])
+        allow read: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit", "reminderLog"])
           && (isPlatformAdmin() || isTenantUser(tenantId));
-        allow create, update: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit"])
+        allow create, update: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit", "reminderLog"])
           && (isPlatformAdmin() || canWriteTenant(tenantId));
-        allow delete: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit"])
+        allow delete: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit", "reminderLog"])
           && (isPlatformAdmin() || canManageTenant(tenantId));
       }
     }
