@@ -17,6 +17,7 @@ const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, a
     pagoSinal: false,
     buscaTerm: '',
     duracao: '02:00', // HH:mm
+    responsavel: '',
     observacoes: ''
   });
 
@@ -44,6 +45,7 @@ const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, a
           data: agendamentoParaEditar.dataStr.split('/').reverse().join('-'),
           horario: agendamentoParaEditar.horario,
           duracao: agendamentoParaEditar.duracao || '02:00',
+          responsavel: agendamentoParaEditar.responsavel || '',
           status: agendamentoParaEditar.status,
           pagoSinal: agendamentoParaEditar.pagoSinal || false,
           valorAdicional: agendamentoParaEditar.valorAdicional || '',
@@ -58,6 +60,7 @@ const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, a
           data: new Date().toISOString().split('T')[0],
           horario: '09:00',
           duracao: '02:00',
+          responsavel: userProfile?.nome || '',
           status: 'Agendado',
           pagoSinal: false,
           buscaTerm: '',
@@ -66,7 +69,7 @@ const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, a
         });
       }
     }
-  }, [isOpen, agendamentoParaEditar, clientes, servicos]);
+  }, [isOpen, agendamentoParaEditar, clientes, servicos, userProfile?.nome]);
 
   useEffect(() => {
     const servico = servicos.find(s => s.id.toString() === formData.servicoId.toString());
@@ -133,7 +136,8 @@ const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, a
       id: agendamentoParaEditar?.id,
       dataStr: dataStrFinal,
       horario: formData.horario,
-      duracao: formData.duracao
+      duracao: formData.duracao,
+      responsavel: formData.responsavel
     }, agendamentos);
 
     if (conflitos.length > 0) {
@@ -296,7 +300,15 @@ const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, a
           )}
 
           <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
-            <div style={{ flex: 1 }}>
+            <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: '#888', fontSize: '13px' }}>Responsável pelo serviço *</label>
+                <input type="text" name="responsavel" list="responsaveis-list" value={formData.responsavel} onChange={handleChange} required placeholder="Quem vai executar"
+                  style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }} />
+                <datalist id="responsaveis-list">
+                  {Array.from(new Set([userProfile?.nome, ...agendamentos.map(a => a.responsavel)].filter(Boolean))).map((nome) => <option key={nome} value={nome} />)}
+                </datalist>
+              </div>
+              <div style={{ flex: 1 }}>
               <label style={{ display: 'block', marginBottom: '8px', color: '#888', fontSize: '13px' }}>Horário de Entrada *</label>
               <div style={{ 
                 display: 'flex', 

@@ -440,6 +440,7 @@ const Agendamentos = () => {
                     #{agendamento.osNumber ? agendamento.osNumber.toString().padStart(5, '0') : '---'}
                   </span>
                   <h3 style={{ margin: 0, fontSize: '16px', color: 'white' }}>{agendamento.cliente}</h3>
+                  {agendamento.responsavel && <div style={{ fontSize: '12px', color: '#aaa' }}>Responsável: {agendamento.responsavel}</div>}
                 </div>
                 <div style={{ display: 'flex', gap: '15px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#888', fontSize: '13px' }}>
