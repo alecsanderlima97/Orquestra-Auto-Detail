@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Calendar, Clock, User, BookOpen, QrCode, Copy, CheckCircle, Car, AlertCircle, Search, DollarSign } from 'lucide-react';
 import { capitalize } from '../utils/masks';
 import { useData } from '../context/DataContext';
+import { findConflicts, timeRange } from '../lib/agenda';
 
 const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, agendamentos, agendamentoParaEditar }) => {
   const { userProfile } = useData();
@@ -127,28 +128,17 @@ const AgendamentoFormModal = ({ isOpen, onClose, onSalvar, clientes, servicos, a
     e.preventDefault();
     const dataStrFinal = new Date(formData.data + 'T12:00:00').toLocaleDateString('pt-BR');
     
-    // Verificação de Conflito de Horário
-    const [hIni, mIni] = formData.horario.split(':').map(Number);
-    const [dHH, dMM] = formData.duracao.split(':').map(Number);
-    const novoInicio = hIni * 60 + mIni;
-    const novoFim = novoInicio + (dHH * 60 + dMM);
+    // Verificação de conflito (mesma regra da agenda do Orquestra One)
+    const conflitos = findConflicts({
+      id: agendamentoParaEditar?.id,
+      dataStr: dataStrFinal,
+      horario: formData.horario,
+      duracao: formData.duracao
+    }, agendamentos);
 
-    const conflito = agendamentos.some(a => {
-      // Ignora o próprio agendamento se for edição e ignora cancelados
-      if (agendamentoParaEditar && a.id === agendamentoParaEditar.id) return false;
-      if (a.status === 'Cancelado') return false;
-      if (a.dataStr !== dataStrFinal) return false;
-
-      const [ah, am] = a.horario.split(':').map(Number);
-      const [adh, adm] = (a.duracao || '02:00').split(':').map(Number);
-      const aInicio = ah * 60 + am;
-      const aFim = aInicio + (adh * 60 + adm);
-
-      return novoInicio < aFim && aInicio < novoFim;
-    });
-
-    if (conflito) {
-      alert('⚠️ CONFLITO DE HORÁRIO: Já existe um serviço agendado neste período para esta data. Por favor, escolha outro horário ou dia.');
+    if (conflitos.length > 0) {
+      const primeiro = conflitos[0];
+      alert(`⚠️ CONFLITO DE HORÁRIO: já existe um serviço neste período (${timeRange(primeiro)}${primeiro.cliente ? " - " + primeiro.cliente : ""}). Escolha outro horário ou dia.`);
       return;
     }
 

@@ -4,6 +4,7 @@ import { useData } from '../context/DataContext';
 import AgendamentoFormModal from '../components/AgendamentoFormModal';
 import ImpressaoOSModal from '../components/ImpressaoOSModal';
 import { getSubscriptionAccess } from '../services/commercialService';
+import { startMinutes, lengthMinutes } from '../lib/agenda';
 
 const getMonthKeyFromDateStr = (dateStr) => {
   if (!dateStr) return '';
@@ -200,7 +201,7 @@ const Agendamentos = () => {
   const abrirWhatsAppLembrete = (agendamento) => {
     const valorSinal = (agendamento.valor * 0.3).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
     const pixLine = userProfile?.pix ? `\n\nChave PIX: ${userProfile.pix}` : '';
-    const msg = `Ol· ${agendamento.cliente}! ??\n\nPassando para confirmar seu agendamento na nossa EstÈtica Automotiva ‡s ${agendamento.horario} do dia ${agendamento.dataStr}.\n\nVeÌculo: ${agendamento.veiculo || 'Seu VeÌculo'}\n\nPara garantir sua vaga no p·tio, solicitamos o pagamento do sinal de 30% (R$ ${valorSinal}).${pixLine}\n\nPode enviar o comprovante por aqui? Aguardamos vocÍ! ?`;
+    const msg = `OlÔøΩ ${agendamento.cliente}! ??\n\nPassando para confirmar seu agendamento na nossa EstÔøΩtica Automotiva ÔøΩs ${agendamento.horario} do dia ${agendamento.dataStr}.\n\nVeÔøΩculo: ${agendamento.veiculo || 'Seu VeÔøΩculo'}\n\nPara garantir sua vaga no pÔøΩtio, solicitamos o pagamento do sinal de 30% (R$ ${valorSinal}).${pixLine}\n\nPode enviar o comprovante por aqui? Aguardamos vocÔøΩ! ?`;
     window.open(`https://wa.me/${agendamento.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -228,15 +229,11 @@ const Agendamentos = () => {
   };
 
   const isHorarioOcupado = (horaStr) => {
-    const [h, m] = horaStr.split(':').map(Number);
-    const timeVal = h * 60 + m;
-
-    return agendamentos.filter(a => a.dataStr === filtroData).some(a => {
-      const [hIni, mIni] = a.horario.split(':').map(Number);
-      const [hDur, mDur] = (a.duracao || '02:00').split(':').map(Number);
-      const start = hIni * 60 + mIni;
-      const end = start + (hDur * 60 + mDur);
-      return timeVal >= start && timeVal < end;
+    const instante = startMinutes({ horario: horaStr });
+    return agendamentos.some((a) => {
+      if (a.dataStr !== filtroData || a.status === 'Cancelado') return false;
+      const inicio = startMinutes(a);
+      return instante >= inicio && instante < inicio + lengthMinutes(a);
     });
   };
 
@@ -258,12 +255,12 @@ const Agendamentos = () => {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header agenda-page-header">
         <div>
           <h1 className="page-title">Agenda & P√°tio</h1>
           <p style={{ color: '#aaa', marginTop: '8px' }}>Gest√£o de fluxos e ocupa√ß√£o da est√©tica automotiva</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="agenda-header-actions">
              <button className="action-btn" style={{ background: 'rgba(255,255,255,0.05)', color: '#888' }} onClick={() => setDataVista(new Date())}>
                 Hoje
              </button>
@@ -304,7 +301,7 @@ const Agendamentos = () => {
           <div className="card" style={{ padding: '16px', borderLeft: '3px solid #f59e0b' }}>
               <div style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>M√ÉO DE OBRA ATIVA</div>
               <div style={{ fontSize: '20px', fontWeight: '900', color: '#f59e0b' }}>
-                  {agendamentos.filter(a => a.dataStr === filtroData && a.status === 'Confirmado').length} Conclu√≠dos
+                  {(() => { const n = agendamentos.filter(a => a.dataStr === filtroData && a.status === 'Confirmado').length; return `${n} ${n === 1 ? 'Confirmado' : 'Confirmados'}`; })()}
               </div>
           </div>
       </div>
@@ -388,7 +385,7 @@ const Agendamentos = () => {
           <h4 style={{ color: '#888', fontSize: '12px', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Clock size={14} /> Disponibilidade (07h - 19h)
           </h4>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
+          <div className="agenda-availability-grid">
             {Array.from({ length: 13 }, (_, i) => {
               const hora = `${(7 + i).toString().padStart(2, '0')}:00`;
               const ocupado = isHorarioOcupado(hora);
