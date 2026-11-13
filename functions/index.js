@@ -880,3 +880,225 @@ exports.portalAiCreditsWebhook = functions
 
 
 
+
+// ---------------------------------------------------------------------------
+// Agendamento pelo cliente (link público)
+// O cliente não grava na agenda: cria um pedido em tenants/{id}/bookingRequests,
+// que a equipe aprova no app. Toda validação acontece aqui, no servidor.
+// ---------------------------------------------------------------------------
+
+const {
+    BookingError,
+    availableSlots,
+    isBookingOpen,
+    isBot,
+    isIsoDate,
+    listPublicServices,
+    normalizeConfig,
+    normalizeSlug,
+    serviceDuration,
+    toStoredDate,
+    validateBookingInput,
+    withinRateLimit
+} = require('./publicBooking');
+
+const BOOKING_LIMIT_IP = { max: 5, windowMs: 60 * 60 * 1000 };       // 5 pedidos por hora por IP
+const BOOKING_LIMIT_PHONE = { max: 3, windowMs: 24 * 60 * 60 * 1000 }; // 3 pedidos por dia por WhatsApp e empresa
+const BOOKING_CONSENT_VERSION = 'v1';
+
+function toHttpsError(error) {
+    if (error instanceof BookingError) return new functions.https.HttpsError(error.code, error.message);
+    return error;
+}
+
+/** Hash curto para chaves de limite: não guardamos IP nem telefone em texto. */
+function hashKey(value) {
+    return crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 40);
+}
+
+function requestIp(context) {
+    const forwarded = String(context.rawRequest?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+    return forwarded || context.rawRequest?.ip || 'desconhecido';
+}
+
+async function loadPublicBooking(slugInput) {
+    const slug = normalizeSlug(slugInput);
+    const unavailable = new functions.https.HttpsError('not-found', 'Agendamento online indisponível para este link.');
+    if (slug.length < 3) throw unavailable;
+    const slugDoc = await db.collection('bookingSlugs').doc(slug).get();
+    if (!slugDoc.exists) throw unavailable;
+    const tenantId = String(slugDoc.get('tenantId') || '');
+    if (!tenantId) throw unavailable;
+    const tenantRef = db.collection('tenants').doc(tenantId);
+    const [tenantSnap, configSnap] = await Promise.all([
+        tenantRef.get(),
+        tenantRef.collection('bookingConfig').doc('main').get()
+    ]);
+    const tenant = tenantSnap.exists ? tenantSnap.data() : null;
+    const config = configSnap.exists ? configSnap.data() : null;
+    if (!config || config.slug !== slug || !isBookingOpen(tenant, config)) throw unavailable;
+    return { tenantId, tenantRef, tenant, config };
+}
+
+function pendingRequestsQuery(tenantRef, date) {
+    return tenantRef.collection('bookingRequests').where('date', '==', date);
+}
+
+exports.getPublicBookingInfo = functions.https.onCall(async (data) => {
+    const { tenantRef, tenant, config } = await loadPublicBooking(data?.slug);
+    const appSnap = await tenantRef.collection('appData').doc('main').get();
+    const servicos = appSnap.exists ? appSnap.get('servicos') : [];
+    return {
+        companyName: String(tenant.name || tenant.companyName || 'Estética automotiva').slice(0, 120),
+        message: config.message || '',
+        workDays: config.workDays,
+        openTime: config.openTime,
+        closeTime: config.closeTime,
+        maxDaysAhead: config.maxDaysAhead,
+        services: listPublicServices(servicos, config.showPrices)
+    };
+});
+
+exports.getPublicAvailability = functions.https.onCall(async (data) => {
+    const date = String(data?.date || '');
+    if (!isIsoDate(date)) throw new functions.https.HttpsError('invalid-argument', 'Data inválida.');
+    const { tenantRef, config } = await loadPublicBooking(data?.slug);
+    const [appSnap, requestsSnap] = await Promise.all([
+        tenantRef.collection('appData').doc('main').get(),
+        pendingRequestsQuery(tenantRef, date).get()
+    ]);
+    const app = appSnap.exists ? appSnap.data() : {};
+    const servico = (app.servicos || []).find((s) => String(s?.id) === String(data?.serviceId || '') && !s.deletedAt && s.deleted !== true);
+    if (!servico) throw new functions.https.HttpsError('invalid-argument', 'Serviço indisponível.');
+    return {
+        slots: availableSlots({
+            config,
+            date,
+            durationMinutes: serviceDuration(servico),
+            appointments: app.agendamentos || [],
+            requests: requestsSnap.docs.map((d) => d.data())
+        })
+    };
+});
+
+exports.createBookingRequest = functions.https.onCall(async (data, context) => {
+    // Robô: responde como sucesso para não ensinar o atacante, mas não grava nada.
+    if (isBot(data || {})) return { ok: true };
+
+    let input;
+    try {
+        input = validateBookingInput(data || {});
+    } catch (error) {
+        throw toHttpsError(error);
+    }
+
+    const { tenantId, tenantRef, config } = await loadPublicBooking(data?.slug);
+    const ipLimitRef = db.collection('bookingRateLimits').doc(`ip-${hashKey(requestIp(context))}`);
+    const phoneLimitRef = db.collection('bookingRateLimits').doc(`tel-${hashKey(`${tenantId}:${input.phone}`)}`);
+    const requestRef = tenantRef.collection('bookingRequests').doc();
+    const nowMs = Date.now();
+
+    await db.runTransaction(async (t) => {
+        const [ipLimit, phoneLimit, appSnap, requestsSnap] = await Promise.all([
+            t.get(ipLimitRef),
+            t.get(phoneLimitRef),
+            t.get(tenantRef.collection('appData').doc('main')),
+            t.get(pendingRequestsQuery(tenantRef, input.date))
+        ]);
+
+        const ipCheck = withinRateLimit(ipLimit.exists ? ipLimit.data() : null, nowMs, BOOKING_LIMIT_IP);
+        const phoneCheck = withinRateLimit(phoneLimit.exists ? phoneLimit.data() : null, nowMs, BOOKING_LIMIT_PHONE);
+        if (!ipCheck.allowed || !phoneCheck.allowed) {
+            throw new functions.https.HttpsError('resource-exhausted', 'Muitos pedidos em pouco tempo. Tente novamente mais tarde ou fale com a empresa pelo WhatsApp.');
+        }
+
+        const app = appSnap.exists ? appSnap.data() : {};
+        const servico = (app.servicos || []).find((s) => String(s?.id) === input.serviceId && !s.deletedAt && s.deleted !== true);
+        if (!servico) throw new functions.https.HttpsError('invalid-argument', 'Serviço indisponível.');
+        const duration = serviceDuration(servico);
+        const slots = availableSlots({
+            config,
+            date: input.date,
+            durationMinutes: duration,
+            appointments: app.agendamentos || [],
+            requests: requestsSnap.docs.map((d) => d.data()),
+            nowMs
+        });
+        if (!slots.includes(input.time)) {
+            throw new functions.https.HttpsError('failed-precondition', 'Este horário acabou de ser ocupado. Escolha outro.');
+        }
+
+        const expiresAt = admin.firestore.Timestamp.fromMillis(nowMs + 2 * 24 * 60 * 60 * 1000);
+        t.set(ipLimitRef, { ...ipCheck.next, expiresAt });
+        t.set(phoneLimitRef, { ...phoneCheck.next, expiresAt });
+        t.set(requestRef, {
+            status: 'pendente',
+            name: input.name,
+            phone: input.phone,
+            vehicle: input.vehicle,
+            plate: input.plate,
+            notes: input.notes,
+            serviceId: input.serviceId,
+            serviceName: String(servico.nome || '').slice(0, 120),
+            durationMinutes: duration,
+            date: input.date,
+            dataStr: toStoredDate(input.date),
+            time: input.time,
+            source: 'link-publico',
+            consentVersion: BOOKING_CONSENT_VERSION,
+            consentAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+    });
+
+    console.log(`[Agendamento online] Pedido ${requestRef.id} criado para o tenant ${tenantId}.`);
+    return { ok: true, protocol: requestRef.id.slice(0, 6).toUpperCase() };
+});
+
+exports.saveBookingConfig = functions.https.onCall(async (data, context) => {
+    requireAuthenticated(context);
+    const tenantId = requiredString(data?.tenantId, 'Empresa');
+    const tenantRef = db.collection('tenants').doc(tenantId);
+    const isPlatformAdmin = String(context.auth.token.email || '').toLowerCase() === PLATFORM_ADMIN_EMAIL;
+    if (!isPlatformAdmin) {
+        const member = await tenantRef.collection('users').doc(context.auth.uid).get();
+        if (!member.exists || !['Proprietario', 'Proprietário'].includes(member.data().role)) {
+            throw new functions.https.HttpsError('permission-denied', 'Só o proprietário pode configurar o agendamento online.');
+        }
+    }
+
+    let config;
+    try {
+        config = normalizeConfig(data?.config || {});
+    } catch (error) {
+        throw toHttpsError(error);
+    }
+
+    const configRef = tenantRef.collection('bookingConfig').doc('main');
+    const slugRef = db.collection('bookingSlugs').doc(config.slug);
+    let previous = null;
+
+    await db.runTransaction(async (t) => {
+        const [tenantSnap, currentSnap, slugSnap] = await Promise.all([t.get(tenantRef), t.get(configRef), t.get(slugRef)]);
+        if (!tenantSnap.exists) throw new functions.https.HttpsError('not-found', 'Empresa não encontrada.');
+        if (slugSnap.exists && slugSnap.get('tenantId') !== tenantId) {
+            throw new functions.https.HttpsError('already-exists', 'Este endereço de link já está em uso. Escolha outro.');
+        }
+        previous = currentSnap.exists ? currentSnap.data() : null;
+        if (previous?.slug && previous.slug !== config.slug) {
+            t.delete(db.collection('bookingSlugs').doc(previous.slug));
+        }
+        t.set(slugRef, { tenantId, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        t.set(configRef, {
+            ...config,
+            updatedBy: context.auth.uid,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+    });
+
+    await writeAudit(tenantId, context, 'booking.config_updated', {
+        before: previous ? { enabled: previous.enabled === true, slug: previous.slug || '' } : null,
+        after: { enabled: config.enabled, slug: config.slug }
+    });
+    return { ok: true, config };
+});

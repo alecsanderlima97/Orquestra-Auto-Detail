@@ -94,12 +94,30 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Agendamento online: configuração só pelo servidor (saveBookingConfig).
+      match /bookingConfig/{configId} {
+        allow read: if isPlatformAdmin() || isTenantUser(tenantId);
+        allow write: if false;
+      }
+
+      // Pedidos do link público: criados só pelo servidor. A equipe apenas aprova ou recusa.
+      match /bookingRequests/{requestId} {
+        allow read: if isPlatformAdmin() || isTenantUser(tenantId);
+        allow create, delete: if false;
+        allow update: if (isPlatformAdmin() || canWriteTenant(tenantId))
+          && resource.data.status == "pendente"
+          && request.resource.data.status in ["aprovado", "recusado"]
+          && request.resource.data.handledBy == request.auth.uid
+          && request.resource.data.handledAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "handledBy", "handledAt", "agendamentoId", "rejectReason"]);
+      }
+
       match /{collectionName}/{documentId} {
-        allow read: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit", "reminderLog"])
+        allow read: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit", "reminderLog", "bookingConfig", "bookingRequests"])
           && (isPlatformAdmin() || isTenantUser(tenantId));
-        allow create, update: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit", "reminderLog"])
+        allow create, update: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit", "reminderLog", "bookingConfig", "bookingRequests"])
           && (isPlatformAdmin() || canWriteTenant(tenantId));
-        allow delete: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit", "reminderLog"])
+        allow delete: if !(collectionName in ["users", "aiUsage", "aiCreditUsage", "aiCreditAdjustments", "payments", "audit", "reminderLog", "bookingConfig", "bookingRequests"])
           && (isPlatformAdmin() || canManageTenant(tenantId));
       }
     }
