@@ -11,7 +11,8 @@ import {
   Users,
   Settings, 
   Calculator as CalcIcon,
-  ShieldCheck
+  ShieldCheck,
+  CalendarCheck
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
@@ -49,6 +50,11 @@ const Sidebar = ({ isOpen, onClose, onToggleCalculator }) => {
           <span>Agenda de Serviços</span>
         </NavLink>
         
+        <NavLink to="/agendamento-online" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")} onClick={handleNavLinkClick}>
+          <CalendarCheck size={20} />
+          <span>Agendamento Online</span>
+        </NavLink>
+
         <NavLink to="/clientes" className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")} onClick={handleNavLinkClick}>
           <Car size={20} />
           <span>Veículos & Clientes</span>

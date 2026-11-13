@@ -1,5 +1,15 @@
 # Session Handover - Orquestra Auto Detail
 
+## Agendamento pelo cliente (branch `feat/agendamento-cliente`, local, sem push/deploy)
+- Link público `/agendar/:slug` (src/pages/PublicBooking.jsx): serviço, data, horário livre, nome, WhatsApp, veículo, placa opcional e consentimento.
+- O pedido vai para `tenants/{id}/bookingRequests` (só o servidor cria). A equipe aprova ou recusa em `/agendamento-online` (src/pages/BookingRequests.jsx); ao aprovar, cria cliente (se novo) e agendamento.
+- Cloud Functions: `getPublicBookingInfo`, `getPublicAvailability`, `createBookingRequest`, `saveBookingConfig` (só proprietário). Regras puras em `functions/publicBooking.js` (+ testes).
+- Antispam: campo-armadilha, 5 pedidos/hora por IP e 3/dia por WhatsApp (chaves com hash em `bookingRateLimits`).
+- Capacidade por horário = "atendimentos simultâneos" da configuração; pedidos pendentes bloqueiam o horário.
+- Link começa DESLIGADO por empresa.
+- Para publicar: `firebase deploy --only functions,firestore:rules` + deploy da Vercel. Rodar `npm test` em functions antes.
+- Pendente: aviso por WhatsApp ao cliente/empresa (depende do provedor), limpeza dos docs `bookingRateLimits` (campo `expiresAt`, configurar TTL no Firestore).
+
 ## Estado atual (branch `feat/agenda-seguranca-local`, ainda não publicada)
 
 ### Feito localmente
