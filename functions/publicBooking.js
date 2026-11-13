@@ -124,19 +124,39 @@ function isActiveRecord(item) {
     return Boolean(item) && !item.deletedAt && item.deleted !== true;
 }
 
-/** Serviços visíveis ao público: só o necessário, sem dados internos. */
+/** Portes (variações de preço) de um serviço, no mesmo formato do formulário da agenda. */
+function servicePortes(servico) {
+    const base = Number(servico?.preco);
+    const extras = Array.isArray(servico?.categorias) ? servico.categorias : [];
+    return [
+        { nome: 'Pequeno', valor: Number.isFinite(base) ? base : 0 },
+        ...extras
+            .filter((c) => String(c?.nome || '').trim())
+            .map((c) => ({ nome: String(c.nome).trim().slice(0, 40), valor: Number(c.valor) || 0 }))
+    ];
+}
+
+/** Nome salvo na agenda: "Serviço" ou "Serviço (Porte)", igual ao formulário interno. */
+function serviceLabel(servico, porte) {
+    const nome = String(servico?.nome || '').trim().slice(0, 120);
+    return porte && porte !== 'Pequeno' ? `${nome} (${porte})` : nome;
+}
+
+/** Catálogo público: o mesmo catálogo da empresa, sem dados internos. */
 function listPublicServices(servicos = [], showPrices = true) {
     return (Array.isArray(servicos) ? servicos : [])
         .filter((s) => isActiveRecord(s) && s.id != null && String(s.nome || '').trim())
         .map((s) => {
-            const prices = [Number(s.preco), ...(Array.isArray(s.categorias) ? s.categorias.map((c) => Number(c?.valor)) : [])]
-                .filter((v) => Number.isFinite(v) && v > 0);
+            const portes = servicePortes(s);
+            const prices = portes.map((p) => p.valor).filter((v) => v > 0);
             return {
                 id: String(s.id),
                 nome: String(s.nome).trim().slice(0, 120),
-                descricao: String(s.descricao || '').trim().slice(0, 400),
+                categoria: String(s.categoria || 'SERVIÇOS').trim().toUpperCase().slice(0, 40),
+                descricao: String(s.descricao || '').trim().slice(0, 1000),
                 duracaoMinutos: serviceDuration(s),
-                precoAPartirDe: showPrices && prices.length ? Math.min(...prices) : null
+                precoAPartirDe: showPrices && prices.length ? Math.min(...prices) : null,
+                portes: portes.map((p) => ({ nome: p.nome, valor: showPrices && p.valor > 0 ? p.valor : null }))
             };
         });
 }
@@ -263,7 +283,8 @@ function validateBookingInput(input = {}) {
         serviceId,
         date: input.date,
         time: input.time,
-        notes: cleanText(input.notes, 300)
+        notes: cleanText(input.notes, 300),
+        porte: cleanText(input.porte, 40) || 'Pequeno'
     };
 }
 
@@ -295,6 +316,8 @@ module.exports = {
     normalizePlate,
     normalizeSlug,
     serviceDuration,
+    serviceLabel,
+    servicePortes,
     toStoredDate,
     validateBookingInput,
     withinRateLimit

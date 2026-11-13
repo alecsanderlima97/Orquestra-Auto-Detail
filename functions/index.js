@@ -897,6 +897,8 @@ const {
     normalizeConfig,
     normalizeSlug,
     serviceDuration,
+    serviceLabel,
+    servicePortes,
     toStoredDate,
     validateBookingInput,
     withinRateLimit
@@ -1028,6 +1030,8 @@ exports.createBookingRequest = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'Este horário acabou de ser ocupado. Escolha outro.');
         }
 
+        // Porte precisa existir no catálogo; preço vem do servidor, nunca do navegador.
+        const porte = servicePortes(servico).find((p) => p.nome === input.porte) || servicePortes(servico)[0];
         const expiresAt = admin.firestore.Timestamp.fromMillis(nowMs + 2 * 24 * 60 * 60 * 1000);
         t.set(ipLimitRef, { ...ipCheck.next, expiresAt });
         t.set(phoneLimitRef, { ...phoneCheck.next, expiresAt });
@@ -1039,7 +1043,9 @@ exports.createBookingRequest = functions.https.onCall(async (data, context) => {
             plate: input.plate,
             notes: input.notes,
             serviceId: input.serviceId,
-            serviceName: String(servico.nome || '').slice(0, 120),
+            serviceName: serviceLabel(servico, porte.nome),
+            porte: porte.nome,
+            price: porte.valor,
             durationMinutes: duration,
             date: input.date,
             dataStr: toStoredDate(input.date),

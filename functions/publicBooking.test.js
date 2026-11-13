@@ -8,6 +8,7 @@ const {
     isBookingOpen,
     isBot,
     listPublicServices,
+    serviceLabel,
     normalizeConfig,
     normalizePhone,
     normalizePlate,
@@ -50,7 +51,7 @@ test('duração: aceita formatos da agenda e do catálogo', () => {
 
 test('serviços públicos: sem itens excluídos e preço só quando permitido', () => {
     const servicos = [
-        { id: 1, nome: 'Lavagem', preco: 80, tempoEstimado: '1h', categorias: [{ valor: 60 }, { valor: 100 }], custoInterno: 10 },
+        { id: 1, nome: 'Lavagem', preco: 80, tempoEstimado: '1h', categorias: [{ nome: 'Médio', valor: 60 }, { nome: 'Grande', valor: 100 }], custoInterno: 10 },
         { id: 2, nome: 'Antigo', preco: 50, deletedAt: '2026-01-01' },
         { id: 3, nome: '' }
     ];
@@ -60,6 +61,11 @@ test('serviços públicos: sem itens excluídos e preço só quando permitido', 
     assert.equal(list[0].duracaoMinutos, 60);
     assert.equal(list[0].custoInterno, undefined);
     assert.equal(listPublicServices(servicos, false)[0].precoAPartirDe, null);
+    assert.equal(list[0].categoria, 'SERVIÇOS');
+    const comPortes = listPublicServices([{ id: 9, nome: 'Vitrificação', categoria: 'Pintura', preco: 900, categorias: [{ nome: 'Médio', valor: 1100 }, { nome: 'Grande / SUV', valor: 1300 }] }], true)[0];
+    assert.equal(comPortes.categoria, 'PINTURA');
+    assert.deepEqual(comPortes.portes, [{ nome: 'Pequeno', valor: 900 }, { nome: 'Médio', valor: 1100 }, { nome: 'Grande / SUV', valor: 1300 }]);
+    assert.deepEqual(listPublicServices([{ id: 9, nome: 'X', preco: 900 }], false)[0].portes, [{ nome: 'Pequeno', valor: null }]);
 });
 
 test('horários: respeita antecedência mínima no mesmo dia', () => {
@@ -109,6 +115,8 @@ test('pedido: exige consentimento e campos válidos, descarta campos extras', ()
     assert.equal(valid.name, 'Maria b Souza /b');
     assert.equal(valid.tenantId, undefined);
     assert.equal(valid.status, undefined);
+    assert.equal(valid.porte, 'Pequeno');
+    assert.equal(validateBookingInput({ ...base, porte: 'Médio' }).porte, 'Médio');
     assert.throws(() => validateBookingInput({ ...base, consent: false }), BookingError);
     assert.throws(() => validateBookingInput({ ...base, phone: '123' }), BookingError);
     assert.throws(() => validateBookingInput({ ...base, time: '25:00' }), BookingError);
@@ -124,4 +132,9 @@ test('antispam: campo-armadilha e limite por janela', () => {
     assert.equal(r.allowed, true);
     assert.equal(withinRateLimit(r.next, 200, rule).allowed, false);
     assert.equal(withinRateLimit(r.next, 1500, rule).allowed, true);
+});
+
+test('nome do serviço segue o padrão da agenda', () => {
+    assert.equal(serviceLabel({ nome: 'Lavagem' }, 'Pequeno'), 'Lavagem');
+    assert.equal(serviceLabel({ nome: 'Lavagem' }, 'Médio'), 'Lavagem (Médio)');
 });

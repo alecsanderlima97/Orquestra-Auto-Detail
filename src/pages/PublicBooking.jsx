@@ -4,6 +4,12 @@ import { createBookingRequest, getPublicAvailability, getPublicBookingInfo } fro
 import { todayDate } from '../lib/agenda';
 import './PublicBooking.css';
 
+// Mesmas cores de categoria do catálogo interno.
+const CATEGORY_COLORS = {
+  LAVAGEM: '#3b82f6', 'ESTÉTICA': '#8b5cf6', PINTURA: '#f59e0b', INTERIOR: '#10b981',
+  MOTOR: '#ef4444', VIDROS: '#06b6d4', MOTOS: '#f43f5e', 'ACESSÓRIOS': '#64748b'
+};
+
 const WEEKDAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
 function maskPhone(value) {
@@ -40,6 +46,7 @@ const PublicBooking = ({ slug }) => {
   const [info, setInfo] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [serviceId, setServiceId] = useState('');
+  const [porte, setPorte] = useState('Pequeno');
   const [date, setDate] = useState('');
   const [slots, setSlots] = useState([]);
   const [slotsState, setSlotsState] = useState('idle'); // idle | loading | ready | error
@@ -81,6 +88,21 @@ const PublicBooking = ({ slug }) => {
   }, [slug, serviceId, date]);
 
   const service = useMemo(() => info?.services.find((s) => s.id === serviceId), [info, serviceId]);
+  const groups = useMemo(() => {
+    const map = new Map();
+    (info?.services || []).forEach((s) => {
+      const key = s.categoria || 'SERVIÇOS';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(s);
+    });
+    return [...map.entries()];
+  }, [info]);
+  const selectedPorte = service?.portes?.find((p) => p.nome === porte);
+
+  const chooseService = (id) => {
+    setServiceId(id);
+    setPorte('Pequeno');
+  };
   const maxDate = info ? addDays(today, info.maxDaysAhead) : '';
   const closedDay = date && info && !info.workDays.includes(new Date(`${date}T12:00:00`).getDay());
 
@@ -100,8 +122,8 @@ const PublicBooking = ({ slug }) => {
     }
     setSending(true);
     try {
-      const result = await createBookingRequest({ slug, serviceId, date, time, ...form });
-      setDone({ protocol: result.protocol, service: service.nome, date, time });
+      const result = await createBookingRequest({ slug, serviceId, porte, date, time, ...form });
+      setDone({ protocol: result.protocol, service: porte !== 'Pequeno' ? `${service.nome} (${porte})` : service.nome, date, time });
     } catch (error) {
       setSubmitError(error.message);
       // Horário pode ter sido ocupado: recarrega a lista.
@@ -168,19 +190,37 @@ const PublicBooking = ({ slug }) => {
           {info.services.length === 0 ? (
             <p className="pb-muted">Nenhum serviço disponível para agendamento online no momento.</p>
           ) : (
-            <div className="pb-services">
-              {info.services.map((s) => (
-                <label key={s.id} className={`pb-service ${serviceId === s.id ? 'selected' : ''}`}>
-                  <input type="radio" name="service" value={s.id} checked={serviceId === s.id} onChange={() => setServiceId(s.id)} />
-                  <span className="pb-service-name">{s.nome}</span>
-                  <span className="pb-service-meta">
-                    <Clock size={14} aria-hidden="true" /> {formatDuration(s.duracaoMinutos)}
-                    {s.precoAPartirDe != null ? <> · a partir de {currency(s.precoAPartirDe)}</> : null}
-                  </span>
-                  {s.descricao ? <span className="pb-service-desc">{s.descricao}</span> : null}
-                </label>
-              ))}
-            </div>
+            groups.map(([categoria, items]) => (
+              <div key={categoria} className="pb-group">
+                <h2 className="pb-group-title" style={{ '--pb-cat': CATEGORY_COLORS[categoria] || 'var(--pb-accent)' }}>{categoria}</h2>
+                <div className="pb-services">
+                  {items.map((s) => (
+                    <label key={s.id} className={`pb-service ${serviceId === s.id ? 'selected' : ''}`} style={{ '--pb-cat': CATEGORY_COLORS[s.categoria] || 'var(--pb-accent)' }}>
+                      <input type="radio" name="service" value={s.id} checked={serviceId === s.id} onChange={() => chooseService(s.id)} />
+                      <span className="pb-service-top">
+                        <span className="pb-service-name">{s.nome}</span>
+                        {s.precoAPartirDe != null ? <span className="pb-service-price">a partir de {currency(s.precoAPartirDe)}</span> : null}
+                      </span>
+                      <span className="pb-service-meta"><Clock size={14} aria-hidden="true" /> {formatDuration(s.duracaoMinutos)}</span>
+                      {s.descricao ? <span className="pb-service-desc">{s.descricao}</span> : null}
+                    </label>
+                  ))}
+                </div>
+                {service && service.categoria === categoria && service.portes?.length > 1 ? (
+                  <div className="pb-portes">
+                    <p className="pb-portes-title">Porte do veículo</p>
+                    <div className="pb-portes-grid" role="radiogroup" aria-label="Porte do veículo">
+                      {service.portes.map((p) => (
+                        <button key={p.nome} type="button" role="radio" aria-checked={porte === p.nome} className={`pb-porte ${porte === p.nome ? 'selected' : ''}`} onClick={() => setPorte(p.nome)}>
+                          <span>{p.nome}</span>
+                          {p.valor != null ? <strong>{currency(p.valor)}</strong> : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ))
           )}
         </fieldset>
 
@@ -255,6 +295,10 @@ const PublicBooking = ({ slug }) => {
         </fieldset>
 
         {submitError ? <p className="pb-error" role="alert">{submitError}</p> : null}
+
+        {service && selectedPorte?.valor != null ? (
+          <p className="pb-summary">{service.nome}{porte !== 'Pequeno' ? ` · ${porte}` : ''}: <strong>{currency(selectedPorte.valor)}</strong> <span className="pb-muted">(valor final confirmado pela empresa)</span></p>
+        ) : null}
 
         <button className="pb-submit" type="submit" disabled={sending || !time || !form.consent}>
           {sending ? <><Loader2 className="pb-spin" size={18} aria-hidden="true" /> Enviando…</> : 'Solicitar agendamento'}
