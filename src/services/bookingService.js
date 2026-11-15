@@ -1,35 +1,36 @@
-// Agendamento pelo cliente: chamadas às Cloud Functions e leitura dos pedidos.
+// Agendamento pelo cliente: chamadas à API (api/booking.js) e leitura dos pedidos.
 // Regras de negócio e validação ficam no servidor (functions/publicBooking.js).
 import { collection, doc, getDoc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { db, firebaseReady, functions as firebaseFunctions } from "../firebase/firebaseConfig";
+import { auth, db, firebaseReady } from "../firebase/firebaseConfig";
 
-const FRIENDLY_ERRORS = {
-  "not-found": "Agendamento online indisponível para este link.",
-  "resource-exhausted": "Muitos pedidos em pouco tempo. Tente novamente mais tarde.",
-  unavailable: "Sem conexão com o servidor. Verifique a internet e tente novamente.",
-  internal: "Não foi possível concluir agora. Tente novamente em instantes."
-};
+const GENERIC_ERROR = "Não foi possível concluir agora. Tente novamente em instantes.";
 
-async function call(name, payload) {
-  if (!firebaseReady || !firebaseFunctions) throw new Error("Serviço indisponível no momento.");
-  try {
-    const result = await httpsCallable(firebaseFunctions, name)(payload);
-    return result.data;
-  } catch (error) {
-    const code = String(error?.code || "").replace(/^functions\//, "");
-    const message = String(error?.message || "").replace(/^FirebaseError:\s*/i, "");
-    throw new Error(code === "internal" || !message ? FRIENDLY_ERRORS[code] || FRIENDLY_ERRORS.internal : message);
+// Chama a API da Vercel (api/booking.js). Ações de gestão enviam o token de login do Firebase.
+async function call(action, payload = {}, { withAuth = false } = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (withAuth) {
+    const token = await auth?.currentUser?.getIdToken?.();
+    if (!token) throw new Error("Faça login novamente para continuar.");
+    headers.Authorization = `Bearer ${token}`;
   }
+  let response;
+  try {
+    response = await fetch("/api/booking", { method: "POST", headers, body: JSON.stringify({ ...payload, action }) });
+  } catch {
+    throw new Error("Sem conexão com o servidor. Verifique a internet e tente novamente.");
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || GENERIC_ERROR);
+  return data;
 }
 
 // --- Página pública ---------------------------------------------------------
-export const getPublicBookingInfo = (slug) => call("getPublicBookingInfo", { slug });
-export const getPublicAvailability = (slug, serviceId, date) => call("getPublicAvailability", { slug, serviceId, date });
-export const createBookingRequest = (payload) => call("createBookingRequest", payload);
+export const getPublicBookingInfo = (slug) => call("info", { slug });
+export const getPublicAvailability = (slug, serviceId, date) => call("availability", { slug, serviceId, date });
+export const createBookingRequest = (payload) => call("request", payload);
 
 // --- App da empresa ---------------------------------------------------------
-export const saveBookingConfig = (tenantId, config) => call("saveBookingConfig", { tenantId, config });
+export const saveBookingConfig = (tenantId, config) => call("saveConfig", { tenantId, config }, { withAuth: true });
 
 export async function getBookingConfig(tenantId) {
   if (!firebaseReady || !db || !tenantId) return null;
