@@ -1,6 +1,17 @@
 {
   "routes": [
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ]
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/booking.js": {
+      "includeFiles": "functions/{bookingCore.js,publicBooking.js,package.json}",
+      "maxDuration": 15
+    }
+  }
 }

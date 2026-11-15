@@ -405,6 +405,7 @@ export const DataProvider = ({ children, currentUser }) => {
     const id = Date.now();
     setClientes(prev => [...prev, { ...cliente, id }]);
     registerAudit('create', 'cliente', id, cliente?.nome || cliente?.name || 'Cliente');
+    return id;
   };
 
   const updateCliente = (id, updatedData) => {
@@ -429,6 +430,7 @@ export const DataProvider = ({ children, currentUser }) => {
     }]);
     setUserProfile(prev => ({ ...prev, osCounter: nextOS + 1 }));
     registerAudit('create', 'agendamento', id, agendamento?.cliente || 'Agendamento');
+    return id;
   };
 
   const updateAgendamento = (id, updatedData) => {

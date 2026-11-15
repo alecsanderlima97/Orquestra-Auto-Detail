@@ -16,6 +16,8 @@ import PlatformAdmin from './pages/PlatformAdmin';
 import Plans from './pages/Plans';
 import UserPermissions from './pages/UserPermissions';
 import { listenAuth } from './services/commercialService';
+import PublicBooking from './pages/PublicBooking';
+import BookingRequests from './pages/BookingRequests';
 
 function App() {
   const [authChecked, setAuthChecked] = useState(false);
@@ -86,6 +88,7 @@ function App() {
             <Route path="planos" element={<Plans />} />
             <Route path="usuarios" element={<UserPermissions />} />
             <Route path="configuracoes" element={<Settings />} />
+            <Route path="agendamento-online" element={<BookingRequests />} />
             <Route path="admin-orquestra" element={user?.role === 'dev' ? <PlatformAdmin /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
@@ -96,4 +99,16 @@ function App() {
   );
 }
 
-export default App;
+// Link público de agendamento (/agendar/:slug): abre sem login e sem o painel.
+function publicBookingSlug() {
+  if (typeof window === 'undefined') return '';
+  const match = window.location.pathname.match(/^\/agendar\/([a-z0-9-]{3,40})\/?$/i);
+  return match ? decodeURIComponent(match[1]).toLowerCase() : '';
+}
+
+function AppRoot() {
+  const slug = publicBookingSlug();
+  return slug ? <PublicBooking slug={slug} /> : <App />;
+}
+
+export default AppRoot;

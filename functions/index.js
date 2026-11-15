@@ -880,3 +880,43 @@ exports.portalAiCreditsWebhook = functions
 
 
 
+
+// ---------------------------------------------------------------------------
+// Agendamento pelo cliente (link público)
+// Em produção roda pela API da Vercel (api/booking.js). Estas callables usam o mesmo núcleo
+// e só funcionam se o projeto Firebase estiver no plano Blaze.
+// ---------------------------------------------------------------------------
+
+const { BookingError, createBookingCore } = require('./bookingCore');
+
+const bookingCore = createBookingCore({
+    db,
+    FieldValue: admin.firestore.FieldValue,
+    Timestamp: admin.firestore.Timestamp
+});
+
+function bookingCallable(run) {
+    return functions.https.onCall(async (data, context) => {
+        try {
+            return await run(data || {}, context);
+        } catch (error) {
+            if (error instanceof BookingError) throw new functions.https.HttpsError(error.code, error.message);
+            throw error;
+        }
+    });
+}
+
+function callableIp(context) {
+    const forwarded = String(context.rawRequest?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+    return forwarded || context.rawRequest?.ip || 'desconhecido';
+}
+
+exports.getPublicBookingInfo = bookingCallable((data) => bookingCore.getInfo(data));
+exports.getPublicAvailability = bookingCallable((data) => bookingCore.getAvailability(data));
+exports.createBookingRequest = bookingCallable(async (data, context) => {
+    const result = await bookingCore.createRequest(data, { ip: callableIp(context) });
+    return { ok: true, protocol: result.protocol };
+});
+exports.saveBookingConfig = bookingCallable((data, context) => bookingCore.saveConfig(data, context.auth
+    ? { uid: context.auth.uid, email: context.auth.token.email || '' }
+    : null));
